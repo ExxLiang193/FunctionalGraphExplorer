@@ -2,7 +2,7 @@
 
 Visualizes the directed graph of an integer map `(a, b, …) → (A, B, …)` on a finite space: every state has one successor, so each component is a cycle with trees feeding into it.
 
-Enter formulas using the variables `a b c d` and the operations below, choose the dimension (ℤ to ℤ⁴), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count.
+Enter formulas using the variables `a b c d e` and the operations below, choose the dimension (ℤ to ℤ⁵), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count.
 
 ## Operations
 
@@ -22,7 +22,7 @@ Examples: Collatz `if(a mod 2 = 0, a/2, 3a + 1)`, Kaprekar `desc(a) - asc(a)`, t
 - Layout is planar: cycles on circles, trees on rings around them.
 - Spaces over the sample limit (10k, 50k or 100k states) show a sample of that size grown breadth-first from a random cycle. Spaces over 1,000,000 states cannot be submitted.
 
-## 50 examples to try
+## Examples to try
 
 Set the space, digits and negatives as listed, type the formulas, and press Submit.
 
@@ -103,7 +103,7 @@ Set the space, digits and negatives as listed, type the formulas, and press Subm
 
 ### Larger views
 
-These use the Sample limit setting. Spaces up to the limit are drawn whole; the last four are samples of million-state spaces.
+These use the Sample limit setting. Spaces up to the limit are drawn whole; rows 62–65 are samples of million-state spaces.
 
 | # | Name | Space | Digits | Negative | Limit | Formulas | What to look for |
 |---|---|---|---|---|---|---|---|
@@ -122,6 +122,7 @@ These use the Sample limit setting. Spaces up to the limit are drawn whole; the 
 | 63 | Quadratic pair (3) | ℤ² | 3 | off | 100k | `b`, `a^2 + b` | The full space has 234 cycles; use Resample to tour different basins. |
 | 64 | Tribonacci mod 100 | ℤ³ | 2 | off | 100k | `b`, `c`, `a + b + c` | Reversible: a sample of its 1,260 rings. |
 | 65 | Fibonacci mod 1000 | ℤ² | 3 | off | 100k | `b`, `a + b` | A sample of its 1,372 rings, the longest 1,500. |
+| 66 | Ducci (5) | ℤ⁵ | 1 | off | 100k | `abs(a - b)`, `abs(b - c)`, `abs(c - d)`, `abs(d - e)`, `abs(e - a)` | With five numbers the difference game falls into nine 15-cycles (or all zeros). |
 
 ### Digit append with longer blocks
 

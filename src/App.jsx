@@ -8,6 +8,7 @@ const DEFAULTS = {
   2: ['b', 'a^2 + b'],
   3: ['b', 'c', 'a*b + c'],
   4: ['b', 'c', 'd', 'a*b + c*d'],
+  5: ['b', 'c', 'd', 'e', 'a*b + c*d + e'],
 }
 const EXAMPLES = [
   { name: 'Fibonacci', dims: 2, digits: 2, f: ['b', 'a + b'] },
@@ -28,7 +29,7 @@ const SYNTAX = [
   'and or xor << >>',
 ]
 const MAX_STATES = 1_000_000 // largest space the form will submit
-const SUP = ['', '', '²', '³', '⁴']
+const SUP = ['', '', '²', '³', '⁴', '⁵']
 const sup = (n) => String(n).replace(/\d/g, (d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d])
 
 function formatCount(s) {
@@ -216,7 +217,7 @@ export default function App() {
         <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2.5 text-xs text-ink-2">
           <label className="flex items-center gap-2">
             Space
-            <Segmented label="Dimensions" value={dims} onChange={setDims} options={[1, 2, 3, 4].map((d) => ({ value: d, label: `ℤ${SUP[d]}` }))} />
+            <Segmented label="Dimensions" value={dims} onChange={setDims} options={[1, 2, 3, 4, 5].map((d) => ({ value: d, label: `ℤ${SUP[d]}` }))} />
           </label>
           <label className="flex items-center gap-2">
             Digits

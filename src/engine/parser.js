@@ -12,7 +12,7 @@
 // AST nodes: {t:'num',v,raw} {t:'var',i} {t:'neg',x} {t:'add'|'sub'|'mul'|'mod'|'pow',l,r}
 //            {t:'call',f,args}  for everything else (see FN in compile.js)
 
-export const VAR_NAMES = ['a', 'b', 'c', 'd']
+export const VAR_NAMES = ['a', 'b', 'c', 'd', 'e']
 
 // name -> [min args, max args]
 export const FUNCTIONS = {
