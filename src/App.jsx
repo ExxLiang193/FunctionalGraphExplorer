@@ -3,6 +3,8 @@ import GraphCanvas from './GraphCanvas.jsx'
 import { VAR_NAMES } from './engine/parser.js'
 import { randomConfig } from './engine/random.js'
 import { composeImage, saveImage } from './exportImage.js'
+import ExamplesMenu from './ExamplesMenu.jsx'
+import { findExample } from './examples.js'
 import { PALETTE, OTHER_SLOT, OPEN_SLOT, assignSlots } from './palette.js'
 
 const DEFAULTS = {
@@ -12,22 +14,13 @@ const DEFAULTS = {
   4: ['b', 'c', 'd', 'a*b + c*d'],
   5: ['b', 'c', 'd', 'e', 'a*b + c*d + e'],
 }
-const EXAMPLES = [
-  { name: 'Fibonacci', dims: 2, digits: 2, f: ['b', 'a + b'] },
-  { name: 'Quadratic', dims: 2, digits: 2, f: ['b', 'a^2 + b'] },
-  { name: 'Digit append', dims: 2, digits: 1, f: ['if(a+b < 10, b, 1)', '(a+b) mod 10'] },
-  { name: 'Collatz', dims: 1, digits: 3, f: ['if(a mod 2 = 0, a/2, 3a + 1)'] },
-  { name: 'Kaprekar', dims: 1, digits: 4, f: ['desc(a) - asc(a)'] },
-  { name: 'Ducci', dims: 4, digits: 1, f: ['abs(a-b)', 'abs(b-c)', 'abs(c-d)', 'abs(d-a)'] },
-  { name: 'Euclid', dims: 2, digits: 2, f: ['abs(a-b)', 'min(a, b)'] },
-  { name: 'Xorshift', dims: 1, digits: 4, f: ['a xor (a << 3) xor (a >> 2)'] },
-]
 const SYNTAX = [
   '+ − * / ^ mod',
   '< <= > >= = !=',
   'if(test, x, y)',
-  'abs min max gcd',
-  'digitsum reverse digits concat asc desc',
+  'abs min max gcd lcm sign isqrt log2',
+  'digitsum digitprod digit(x, i) digits reverse concat asc desc',
+  'sigma phi spf isprime',
   'and or xor << >>',
 ]
 const MAX_STATES = 1_000_000 // largest space the form will submit
@@ -67,13 +60,14 @@ const panel = 'rounded-xl border border-line bg-panel/90 shadow-2xl shadow-black
 export default function App() {
   const [dims, setDims] = useState(2)
   const [digits, setDigits] = useState(2)
+  const [modulus, setModulus] = useState('') // custom modulus as typed; empty = use 10^digits
   const [negative, setNegative] = useState(false)
   const [byDims, setByDims] = useState(DEFAULTS)
   const [nonce, setNonce] = useState(0)
   const [collapsed, setCollapsed] = useState(false)
   // The graph only recomputes from `applied`, which changes on Submit (or Enter in a formula).
   const [limit, setLimit] = useState(10000)
-  const [applied, setApplied] = useState({ dims: 2, digits: 2, negative: false, limit: 10000, formulas: DEFAULTS[2] })
+  const [applied, setApplied] = useState({ dims: 2, digits: 2, modulus: null, negative: false, limit: 10000, formulas: DEFAULTS[2] })
   const [result, setResult] = useState(null) // { graph, stats }
   const [error, setError] = useState(null)
   const [progress, setProgress] = useState(null)
@@ -139,7 +133,7 @@ export default function App() {
       tail: ')',
       meta: [
         `ℤ${SUP[drawn.dims]}`,
-        `${drawn.digits} digit${drawn.digits > 1 ? 's' : ''}`,
+        drawn.modulus ? `mod ${drawn.modulus.toLocaleString()}` : `${drawn.digits} digit${drawn.digits > 1 ? 's' : ''}`,
         drawn.negative ? 'negatives allowed' : 'non-negative',
         `${formatCount(drawn.stats.totalStates)} states${drawn.stats.truncated ? `, ${drawn.stats.shown.toLocaleString()} shown` : ''}`,
         ...(drawn.stats.cycles != null ? [`${drawn.stats.cycles.toLocaleString()} cycle${drawn.stats.cycles === 1 ? '' : 's'}`] : []),
@@ -157,18 +151,26 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const dirty = dims !== applied.dims || digits !== applied.digits || negative !== applied.negative || limit !== applied.limit || formulas.some((f, i) => f !== applied.formulas[i])
-  const stateCount = BigInt(negative ? 2 * 10 ** digits - 1 : 10 ** digits) ** BigInt(dims)
+  const mod = modulus.trim() === '' ? null : Number(modulus)
+  const modBad = mod !== null && !(Number.isInteger(mod) && mod >= 2 && mod <= MAX_STATES)
+  const P = mod !== null && !modBad ? mod : 10 ** digits
+  const known = findExample({ dims, digits, modulus: modBad ? null : mod, negative, formulas })
+  const dirty = dims !== applied.dims || (mod === null && digits !== applied.digits) || mod !== applied.modulus || negative !== applied.negative || limit !== applied.limit || formulas.some((f, i) => f !== applied.formulas[i])
+  const stateCount = BigInt(negative ? 2 * P - 1 : P) ** BigInt(dims)
   const tooBig = stateCount > BigInt(MAX_STATES)
-  const submit = (e) => { e.preventDefault(); if (dirty && !tooBig) { setError(null); setApplied({ dims, digits, negative, limit, formulas }) } }
+  const submit = (e) => { e.preventDefault(); if (dirty && !tooBig && !modBad) { setError(null); setApplied({ dims, digits, modulus: mod, negative, limit, formulas }) } }
   const randomize = () => {
     const r = randomConfig(MAX_STATES)
-    setDims(r.dims); setDigits(r.digits); setNegative(r.negative)
+    setDims(r.dims); setDigits(r.digits); setModulus(''); setNegative(r.negative)
     setByDims((m) => ({ ...m, [r.dims]: r.formulas }))
+  }
+  const loadExample = (ex) => {
+    setDims(ex.dims); setDigits(ex.digits); setModulus(ex.modulus ? String(ex.modulus) : '')
+    setNegative(!!ex.negative); setLimit(ex.limit ?? 10000)
+    setByDims((m) => ({ ...m, [ex.dims]: ex.f }))
   }
   const setFormula = (i, v) => setByDims((m) => ({ ...m, [dims]: m[dims].map((f, j) => (j === i ? v : f)) }))
   const stats = result?.stats
-  const P = 10 ** digits
   const range = negative ? `[−${P - 1}, ${P - 1}]` : `[0, ${P - 1}]`
 
   let rows = [], note = null
@@ -251,6 +253,13 @@ export default function App() {
           ))}
           <span className="text-ink-3">)</span>
         </div>
+        {known && (
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-0.5 text-[11px] text-ink-3">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#3987e5]" />
+            Known example: <span className="text-ink-2">{known.example.name}</span>
+            {!known.exact && <span>(with different settings)</span>}
+          </div>
+        )}
         {error && <div className="mt-2 text-xs text-[#e66767]">{error.message}</div>}
 
         <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2.5 text-xs text-ink-2">
@@ -260,7 +269,19 @@ export default function App() {
           </label>
           <label className="flex items-center gap-2">
             Digits
-            <Segmented label="Digits" value={digits} onChange={setDigits} options={[1, 2, 3, 4, 5].map((d) => ({ value: d, label: d }))} />
+            <Segmented label="Digits" value={mod === null ? digits : null} onChange={(d) => { setDigits(d); setModulus('') }} options={[1, 2, 3, 4, 5].map((d) => ({ value: d, label: d }))} />
+          </label>
+          <label className="flex items-center gap-2" title="Wrap at any modulus instead of a power of ten, e.g. a prime like 997 or a power of two like 4096">
+            or modulus
+            <input
+              value={modulus}
+              onChange={(e) => setModulus(e.target.value.replace(/[^0-9]/g, ''))}
+              inputMode="numeric"
+              placeholder={(10 ** digits).toLocaleString()}
+              aria-label="Custom modulus"
+              aria-invalid={modBad}
+              className={`w-20 select-text rounded-md border bg-surface px-2 py-1 font-mono text-xs text-ink outline-none placeholder:text-ink-3 focus:border-[#3987e5] ${modBad ? 'border-[#e66767]' : 'border-line'}`}
+            />
           </label>
           <label className="flex cursor-pointer items-center gap-2 text-ink">
             <input type="checkbox" checked={negative} onChange={(e) => setNegative(e.target.checked)} className="h-3.5 w-3.5 accent-[#3987e5]" />
@@ -274,7 +295,7 @@ export default function App() {
 
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-ink-3">
           <span>
-            {vars.join(', ')} ∈ {range} · {negative ? `results keep their sign and last ${digits} digit${digits > 1 ? 's' : ''}` : `results wrap mod ${P.toLocaleString()}`}
+            {vars.join(', ')} ∈ {range} · {negative ? `results keep their sign; the size wraps mod ${P.toLocaleString()}` : `results wrap mod ${P.toLocaleString()}`}
           </span>
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5 font-mono text-[11px] text-ink-3">
@@ -282,20 +303,10 @@ export default function App() {
             <span key={t} className="rounded bg-white/5 px-1.5 py-0.5">{t}</span>
           ))}
         </div>
-        {
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-3">
-            Try
-            {EXAMPLES.map((ex) => (
-              <button key={ex.name} type="button" onClick={() => { setDims(ex.dims); setDigits(ex.digits); setNegative(false); setByDims((m) => ({ ...m, [ex.dims]: ex.f })) }} className="rounded-full border border-line px-2 py-0.5 text-ink-2 transition-colors hover:border-ink-3 hover:text-ink">
-                {ex.name}
-              </button>
-            ))}
-          </div>
-        }
         <div className="mt-3.5 flex items-center gap-3">
           <button
             type="submit"
-            disabled={!dirty || tooBig}
+            disabled={!dirty || tooBig || modBad}
             className="rounded-md bg-[#3987e5] px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#4f96ea] disabled:cursor-default disabled:bg-white/10 disabled:text-ink-3"
           >
             Submit
@@ -314,9 +325,12 @@ export default function App() {
               ))}
             </svg>
           </button>
-          {tooBig ? (
+          <ExamplesMenu onPick={loadExample} />
+          {modBad ? (
+            <span className="text-[11px] text-[#e66767]">Modulus must be a whole number from 2 to {MAX_STATES.toLocaleString()}.</span>
+          ) : tooBig ? (
             <span className="text-[11px] text-[#e66767]">
-              {formatCount(stateCount)} states is over the {MAX_STATES.toLocaleString()} limit. Lower the digits or the dimension.
+              {formatCount(stateCount)} states is over the {MAX_STATES.toLocaleString()} limit. Lower the digits, modulus or dimension.
             </span>
           ) : (
             dirty && <span className="text-[11px] text-ink-3">Unapplied changes</span>
