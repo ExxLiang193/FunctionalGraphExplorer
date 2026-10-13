@@ -2,7 +2,7 @@
 
 Visualizes the directed graph of an integer map `(a, b, …) → (A, B, …)` on a finite space: every state has one successor, so each component is a cycle with trees feeding into it.
 
-Enter formulas using the variables `a b c d e` and the operations below, choose the dimension (ℤ to ℤ⁵), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count.
+Enter formulas using the variables `a b c d e` and the operations below, choose the dimension (ℤ to ℤ⁵), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count. The dice button fills in a random space and random formulas (at most 9 symbols each, at most 1,000,000 states).
 
 ## Operations
 
@@ -15,6 +15,8 @@ Enter formulas using the variables `a b c d e` and the operations below, choose 
 | Bitwise | `and`, `or`, `xor`, `<<`, `>>` |
 
 Examples: Collatz `if(a mod 2 = 0, a/2, 3a + 1)`, Kaprekar `desc(a) - asc(a)`, the digit-append Fibonacci `(if(a+b < 10, b, 1), (a+b) mod 10)`.
+
+Press **⌥S** (Option+S, or the Save button) to save the current view as a PNG, with the formula above the graph and the legend below it.
 
 ## Reading the graph
 

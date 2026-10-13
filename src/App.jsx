@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import GraphCanvas from './GraphCanvas.jsx'
 import { VAR_NAMES } from './engine/parser.js'
+import { randomConfig } from './engine/random.js'
+import { composeImage, saveImage } from './exportImage.js'
 import { PALETTE, OTHER_SLOT, OPEN_SLOT, assignSlots } from './palette.js'
 
 const DEFAULTS = {
@@ -88,7 +90,7 @@ export default function App() {
       worker.onmessage = ({ data }) => {
         if (data.type === 'progress') return setProgress(data.p)
         setProgress(null)
-        if (data.type === 'done') { setError(null); setResult({ graph: data.graph, stats: data.stats }) }
+        if (data.type === 'done') { setError(null); setResult({ graph: data.graph, stats: data.stats, params: applied }) }
         else setError(data)
         worker.terminate()
       }
@@ -123,10 +125,47 @@ export default function App() {
     return { slots, legend }
   }, [result])
 
+  // Option+S (or the Save button): the current view plus formula and legend, as a PNG.
+  // `drawn` is the configuration the visible graph was computed from.
+  const drawn = result ? { ...result.params, stats: result.stats } : null
+  const saveRef = useRef(null)
+  saveRef.current = () => {
+    if (!drawn || !canvasRef.current) return
+    const names = VAR_NAMES.slice(0, drawn.dims)
+    const scale = Math.max(2, window.devicePixelRatio || 1)
+    const info = {
+      head: `(${names.join(', ')}) → (`,
+      parts: drawn.formulas,
+      tail: ')',
+      meta: [
+        `ℤ${SUP[drawn.dims]}`,
+        `${drawn.digits} digit${drawn.digits > 1 ? 's' : ''}`,
+        drawn.negative ? 'negatives allowed' : 'non-negative',
+        `${formatCount(drawn.stats.totalStates)} states${drawn.stats.truncated ? `, ${drawn.stats.shown.toLocaleString()} shown` : ''}`,
+        ...(drawn.stats.cycles != null ? [`${drawn.stats.cycles.toLocaleString()} cycle${drawn.stats.cycles === 1 ? '' : 's'}`] : []),
+      ].join('  ·  '),
+      legend: legend.map((l) => ({ color: l.color, label: l.label ?? (l.len === 1 ? '1 (fixed point)' : l.len.toLocaleString()), count: l.count })),
+    }
+    const slug = drawn.formulas.join('_').replace(/\s+/g, '').replace(/[^A-Za-z0-9^+()=,_-]/g, '-').slice(0, 60)
+    saveImage(() => composeImage(canvasRef.current.snapshot(scale), scale, info), `graph_${slug}.png`).catch((e) => setError({ message: `Could not save image: ${e.message}`, formulaIndex: null }))
+  }
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.code === 'KeyS' && e.altKey && !e.metaKey && !e.ctrlKey) { e.preventDefault(); saveRef.current() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const dirty = dims !== applied.dims || digits !== applied.digits || negative !== applied.negative || limit !== applied.limit || formulas.some((f, i) => f !== applied.formulas[i])
   const stateCount = BigInt(negative ? 2 * 10 ** digits - 1 : 10 ** digits) ** BigInt(dims)
   const tooBig = stateCount > BigInt(MAX_STATES)
   const submit = (e) => { e.preventDefault(); if (dirty && !tooBig) { setError(null); setApplied({ dims, digits, negative, limit, formulas }) } }
+  const randomize = () => {
+    const r = randomConfig(MAX_STATES)
+    setDims(r.dims); setDigits(r.digits); setNegative(r.negative)
+    setByDims((m) => ({ ...m, [r.dims]: r.formulas }))
+  }
   const setFormula = (i, v) => setByDims((m) => ({ ...m, [dims]: m[dims].map((f, j) => (j === i ? v : f)) }))
   const stats = result?.stats
   const P = 10 ** digits
@@ -261,6 +300,20 @@ export default function App() {
           >
             Submit
           </button>
+          <button
+            type="button"
+            onClick={randomize}
+            aria-label="Randomize"
+            title="Randomize: fill in a random space and random formulas"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-line text-ink-2 transition-colors hover:border-ink-3 hover:text-ink"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <rect x="3.5" y="3.5" width="17" height="17" rx="3.5" />
+              {[[8, 8], [16, 8], [12, 12], [8, 16], [16, 16]].map(([cx, cy]) => (
+                <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1.3" fill="currentColor" stroke="none" />
+              ))}
+            </svg>
+          </button>
           {tooBig ? (
             <span className="text-[11px] text-[#e66767]">
               {formatCount(stateCount)} states is over the {MAX_STATES.toLocaleString()} limit. Lower the digits or the dimension.
@@ -319,6 +372,11 @@ export default function App() {
         {stats?.truncated && (
           <button onClick={() => setNonce((n) => n + 1)} className={`px-3 py-2 text-ink-2 transition-colors hover:text-ink ${panel}`} title="Start from a different random state">
             Resample
+          </button>
+        )}
+        {result && (
+          <button onClick={() => saveRef.current()} className={`px-3 py-2 text-ink-2 transition-colors hover:text-ink ${panel}`} title="Save image with formula and legend (⌥S)">
+            Save
           </button>
         )}
         <div className={`flex overflow-hidden ${panel}`}>
