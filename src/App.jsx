@@ -204,7 +204,7 @@ export default function App() {
           </label>
           <label className="flex items-center gap-2">
             Digits
-            <Segmented label="Digits" value={digits} onChange={setDigits} options={[1, 2, 3, 4, 5, 6].map((d) => ({ value: d, label: d }))} />
+            <Segmented label="Digits" value={digits} onChange={setDigits} options={[1, 2, 3, 4, 5].map((d) => ({ value: d, label: d }))} />
           </label>
           <label className="flex cursor-pointer items-center gap-2 text-ink">
             <input type="checkbox" checked={negative} onChange={(e) => setNegative(e.target.checked)} className="h-3.5 w-3.5 accent-[#3987e5]" />
