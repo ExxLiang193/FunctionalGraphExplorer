@@ -3,6 +3,7 @@ import { parse } from '../src/engine/parser.js'
 import { compile } from '../src/engine/compile.js'
 import { build, BUDGET } from '../src/engine/build.js'
 import { layout } from '../src/engine/layout.js'
+import { randomConfig, countSymbols, MAX_SYMBOLS } from '../src/engine/random.js'
 
 // --- reference evaluator: exact BigInt tree walk ---
 function ev(n, v) {
@@ -160,6 +161,32 @@ for (const p of [
   const s = g.stats
   console.log(`${p.formulas.join(' | ')} d=${p.digits} neg=${p.negative}: N=${s.totalStates} ${s.mode} m=${g.m} comps=${L.compR.length} cycles=${s.cycles ?? '?'} longest=${s.longest ?? s.lambda} tiers=${s.tiers} build=${(t1 - t0).toFixed(0)}ms layout=${(t2 - t1).toFixed(0)}ms span=${(L.bounds[2] - L.bounds[0]).toFixed(0)}`)
 }
+// --- randomizer: always a legal, bounded, buildable configuration ---
+{
+  let seed = 12345
+  const rnd = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
+  const seen = new Set()
+  let slowest = 0
+  for (let i = 0; i < 400; i++) {
+    const r = randomConfig(1e6, rnd)
+    const states = (r.negative ? 2 * 10 ** r.digits - 1 : 10 ** r.digits) ** r.dims
+    assert.ok(states <= 1e6, 'state limit')
+    assert.equal(r.formulas.length, r.dims)
+    for (const f of r.formulas) {
+      assert.ok(countSymbols(f) <= MAX_SYMBOLS, `symbols: ${f}`)
+      parse(f, r.dims)
+      for (const w of f.match(/[a-z]+/g) || []) seen.add(w.length > 1 ? w : 'var')
+    }
+    const t = performance.now()
+    const b = build({ ...r })
+    slowest = Math.max(slowest, performance.now() - t)
+    assert.ok(b.m > 0)
+  }
+  for (const w of ['if', 'abs', 'min', 'gcd', 'digitsum', 'reverse', 'asc', 'desc', 'xor', 'and', 'or', 'mod']) assert.ok(seen.has(w), `never generated ${w}`)
+  console.log(`randomizer: 400 configs ok, slowest build ${slowest.toFixed(0)}ms`)
+  for (let i = 0; i < 6; i++) { const r = randomConfig(1e6, rnd); console.log(`  Z^${r.dims} d=${r.digits} neg=${r.negative}: (${r.formulas.join(', ')})`) }
+}
+
 // --- sample limit ---
 for (const limit of [50000, 100000]) {
   g = build({ dims: 2, digits: 3, negative: false, formulas: ['b', 'a^2+b'], limit })
