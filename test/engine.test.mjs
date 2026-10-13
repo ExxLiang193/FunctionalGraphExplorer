@@ -15,6 +15,37 @@ function ev(n, v) {
     case 'mul': return ev(n.l, v) * ev(n.r, v)
     case 'mod': { const x = ev(n.l, v), y = ev(n.r, v); if (y === 0n) return x; const r = x % y; return r !== 0n && (r < 0n) !== (y < 0n) ? r + y : r }
     case 'pow': { const b = ev(n.l, v), e = ev(n.r, v); if (e < 0n) return b === 1n ? 1n : b === -1n ? (e % 2n ? -1n : 1n) : 0n; return b ** e }
+    case 'call': {
+      if (n.f === 'if') return ev(n.args[0], v) !== 0n ? ev(n.args[1], v) : ev(n.args[2], v)
+      const [x, y] = n.args.map((k) => ev(k, v))
+      const abs = (t) => (t < 0n ? -t : t), str = (t) => abs(t).toString(), sg = (t, r) => (t < 0n ? -BigInt(r) : BigInt(r))
+      const floorDiv = (p, q) => { if (q === 0n) return 0n; let k = p / q; if (k * q !== p && (p < 0n) !== (q < 0n)) k -= 1n; return k }
+      switch (n.f) {
+        case 'div': return floorDiv(x, y)
+        case 'lt': return x < y ? 1n : 0n
+        case 'le': return x <= y ? 1n : 0n
+        case 'gt': return x > y ? 1n : 0n
+        case 'ge': return x >= y ? 1n : 0n
+        case 'eq': return x === y ? 1n : 0n
+        case 'ne': return x !== y ? 1n : 0n
+        case 'abs': return abs(x)
+        case 'min': return x < y ? x : y
+        case 'max': return x > y ? x : y
+        case 'gcd': { let p = abs(x), q = abs(y); while (q) [p, q] = [q, p % q]; return p }
+        case 'digitsum': return sg(x, [...str(x)].reduce((t, c) => t + Number(c), 0))
+        case 'reverse': return sg(x, [...str(x)].reverse().join(''))
+        case 'digits': return BigInt(str(x).length)
+        case 'concat': return sg(x, str(x) + str(y))
+        case 'asc': return sg(x, [...str(x)].sort().join(''))
+        case 'desc': return x === 0n ? 0n : sg(x, [...str(x)].sort().reverse().join('').padEnd(v.D, '0'))
+        case 'band': return x & y
+        case 'bor': return x | y
+        case 'bxor': return x ^ y
+        case 'shl': return y >= 0n ? x << y : x >> -y
+        case 'shr': return y >= 0n ? x >> y : x << -y
+      }
+      throw new Error('ref: ' + n.f)
+    }
   }
 }
 function wrap(x, P, negative) { const p = BigInt(P); return Number(negative ? x % p : ((x % p) + p) % p) }
@@ -22,6 +53,11 @@ function wrap(x, P, negative) { const p = BigInt(P); return Number(negative ? x 
 const cases = [
   ['b', 'a+b'], ['a^2+b', 'a*b-7'], ['a^b', 'b-a'], ['a^b+1', '(a+b) mod 7'], ['-a^2', 'a mod (b-5)'],
   ['2a(b+1)', 'a^3^2 - b'], ['a^(b-5)', 'a mod 0 + b'], ['99999999999999999999*a+b', 'a - -b'], ['(a^b) mod 13', 'b^a*a^b'],
+  ['a / (b-3)', '(a-7) div 3 + b/0'], ['if(a mod 2 = 0, a/2, 3a+1)', 'if(a < b, a^b, b - a)'], ['a <= b', '(a != b) + (a >= 5) + (a > b) + (a == 3)'],
+  ['abs(a-b)', 'min(a, b, 5) + max(a-b, b-a, 3)'], ['gcd(a, b)', 'gcd(a-5, b, 12)'], ['digitsum(a*b-30)', 'reverse(a*b-200) + digits(a-b)'],
+  ['concat(a, b)', 'concat(a-5, b-5, 7)'], ['desc(a*b-9) - asc(a*b-9)', 'asc(a-50)+desc(b)'], ['a xor b', '(a-5) and (b-3) or 8'],
+  ['a << 2', '(a*b-40) >> (b-3)'], ['a xor (a << 13)', 'a < 5 and b > 2 or a = b'], ['99999999999999999999 / (a+1)', 'digitsum(a^b)'],
+  ['if(a < 3, a^b + b, a)', 'reverse(a^b) mod 97'], ['(a^b) xor b', 'gcd(a^b, 12) + (a^b >> 3)'], ['a << b', 'concat(a^b, b)'],
 ]
 let tiersSeen = new Set()
 for (const negative of [false, true]) for (const digits of [1, 2]) for (const f of cases) {
@@ -35,6 +71,7 @@ for (const negative of [false, true]) for (const digits of [1, 2]) for (const f 
   const s = new Float64Array(2), o = new Float64Array(2)
   for (let i = 0; i < N; i++) {
     const v = [Math.floor(i / c.R) + c.lo, (i % c.R) + c.lo]
+    v.D = digits
     const want = asts.map((a) => wrap(ev(a, v), c.P, negative))
     const wi = (want[0] - c.lo) * c.R + (want[1] - c.lo)
     assert.equal(next[i], wi, `${f} neg=${negative} d=${digits} at ${v}: tiers ${c.tiers}`)
@@ -43,7 +80,17 @@ for (const negative of [false, true]) for (const digits of [1, 2]) for (const f 
   }
 }
 assert.deepEqual([...tiersSeen].sort(), ['bigint', 'float', 'modular'])
-assert.throws(() => parse('a+c', 2)); assert.throws(() => parse('a+', 2)); assert.throws(() => parse('(a', 2))
+for (const bad of ['a+c', 'a+', '(a', 'abs()', 'abs(a,b)', 'if(a,b)', 'a ! b', 'min(a)', 'gcd a', 'a,b']) assert.throws(() => parse(bad, 2), bad)
+
+// --- the digit-append Fibonacci from the README: cycles 1123581347, 1459 and 00 ---
+assert.deepEqual(build({ dims: 2, digits: 1, negative: false, formulas: ['if(a+b<10, b, 1)', '(a+b) mod 10'] }).stats.census, [[1, 1], [3, 1], [8, 1]])
+// --- Kaprekar: every 4-digit number with two distinct digits reaches 6174 ---
+{
+  const k = build({ dims: 1, digits: 4, negative: false, formulas: ['desc(a) - asc(a)'] })
+  assert.deepEqual(k.stats.census, [[1, 2]]) // fixed points 0 and 6174
+}
+// --- Collatz on 1..999 wraps, but must at least evaluate and enumerate ---
+assert.equal(build({ dims: 1, digits: 3, negative: false, formulas: ['if(a mod 2 = 0, a/2, 3a+1)'] }).stats.totalStates, '1000')
 
 // --- Fibonacci mod 10: known cycle structure 60,20,12,4,3,1 ---
 let g = build({ dims: 2, digits: 1, negative: false, formulas: ['b', 'a+b'] })
