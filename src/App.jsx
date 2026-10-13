@@ -10,10 +10,22 @@ const DEFAULTS = {
   4: ['b', 'c', 'd', 'a*b + c*d'],
 }
 const EXAMPLES = [
-  { name: 'Fibonacci', f: ['b', 'a + b'] },
-  { name: 'Quadratic', f: ['b', 'a^2 + b'] },
-  { name: 'Product', f: ['a*b + 1', 'a + b'] },
-  { name: 'Powers', f: ['a^b', 'b - a'] },
+  { name: 'Fibonacci', dims: 2, digits: 2, f: ['b', 'a + b'] },
+  { name: 'Quadratic', dims: 2, digits: 2, f: ['b', 'a^2 + b'] },
+  { name: 'Digit append', dims: 2, digits: 1, f: ['if(a+b < 10, b, 1)', '(a+b) mod 10'] },
+  { name: 'Collatz', dims: 1, digits: 3, f: ['if(a mod 2 = 0, a/2, 3a + 1)'] },
+  { name: 'Kaprekar', dims: 1, digits: 4, f: ['desc(a) - asc(a)'] },
+  { name: 'Ducci', dims: 4, digits: 1, f: ['abs(a-b)', 'abs(b-c)', 'abs(c-d)', 'abs(d-a)'] },
+  { name: 'Euclid', dims: 2, digits: 2, f: ['abs(a-b)', 'min(a, b)'] },
+  { name: 'Xorshift', dims: 1, digits: 4, f: ['a xor (a << 3) xor (a >> 2)'] },
+]
+const SYNTAX = [
+  '+ − * / ^ mod',
+  '< <= > >= = !=',
+  'if(test, x, y)',
+  'abs min max gcd',
+  'digitsum reverse digits concat asc desc',
+  'and or xor << >>',
 ]
 const SUP = ['', '', '²', '³', '⁴']
 const sup = (n) => String(n).replace(/\d/g, (d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d])
@@ -216,18 +228,22 @@ export default function App() {
           <span>
             {vars.join(', ')} ∈ {range} · {negative ? `results keep their sign and last ${digits} digit${digits > 1 ? 's' : ''}` : `results wrap mod ${P.toLocaleString()}`}
           </span>
-          <span className="font-mono">+ − * ^ mod ( )</span>
         </div>
-        {dims === 2 && (
+        <div className="mt-2 flex flex-wrap gap-1.5 font-mono text-[11px] text-ink-3">
+          {SYNTAX.map((t) => (
+            <span key={t} className="rounded bg-white/5 px-1.5 py-0.5">{t}</span>
+          ))}
+        </div>
+        {
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-3">
             Try
             {EXAMPLES.map((ex) => (
-              <button key={ex.name} type="button" onClick={() => setByDims((m) => ({ ...m, 2: ex.f }))} className="rounded-full border border-line px-2 py-0.5 text-ink-2 transition-colors hover:border-ink-3 hover:text-ink">
+              <button key={ex.name} type="button" onClick={() => { setDims(ex.dims); setDigits(ex.digits); setNegative(false); setByDims((m) => ({ ...m, [ex.dims]: ex.f })) }} className="rounded-full border border-line px-2 py-0.5 text-ink-2 transition-colors hover:border-ink-3 hover:text-ink">
                 {ex.name}
               </button>
             ))}
           </div>
-        )}
+        }
         <div className="mt-3.5 flex items-center gap-3">
           <button
             type="submit"
