@@ -2,11 +2,104 @@
 
 Visualizes the directed graph of an integer map `(a, b, …) → (A, B, …)` on a finite space: every state has one successor, so each component is a cycle with trees feeding into it.
 
-Enter formulas using `a b c d`, `+ - * ^ mod ( )`, choose the dimension (ℤ to ℤ⁴), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count.
+Enter formulas using the variables `a b c d` and the operations below, choose the dimension (ℤ to ℤ⁴), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count.
+
+## Operations
+
+| | |
+|---|---|
+| Arithmetic | `+ - * ^`, `/` or `div` (rounds down), `mod` |
+| Tests (give 1 or 0) | `< <= > >= = !=`, `if(test, x, y)` |
+| Numeric | `abs(x)`, `min(x, y, …)`, `max(…)`, `gcd(…)` |
+| Digits | `digitsum(x)`, `reverse(x)`, `digits(x)` (count), `concat(x, y)`, `asc(x)`, `desc(x)` (sorted digits; `desc` pads to the digit setting) |
+| Bitwise | `and`, `or`, `xor`, `<<`, `>>` |
+
+Examples: Collatz `if(a mod 2 = 0, a/2, 3a + 1)`, Kaprekar `desc(a) - asc(a)`, the digit-append Fibonacci `(if(a+b < 10, b, 1), (a+b) mod 10)`.
+
+## Reading the graph
 
 - Hue = length of the cycle a basin drains into; brightness fades with distance from the cycle.
 - Layout is planar: cycles on circles, trees on rings around them.
 - Spaces over 10,000 states show a 10,000-state sample grown breadth-first from a random cycle; spaces too large to enumerate (over ~16.7M states) show forward orbits only.
+
+## 50 examples to try
+
+Set the space, digits and negatives as listed, type the formulas, and press Submit.
+
+### Linear and reversible (rings only)
+
+| # | Name | Space | Digits | Negative | Formulas | What to look for |
+|---|---|---|---|---|---|---|
+| 1 | Fibonacci | ℤ² | 1 | off | `b`, `a + b` | Six rings of length 60, 20, 12, 4, 3 and 1. |
+| 2 | Fibonacci mod 100 | ℤ² | 2 | off | `b`, `a + b` | Same map, more digits; the longest ring is 300 (the Pisano period). |
+| 3 | Pell | ℤ² | 2 | off | `b`, `a + 2b` | A different linear recurrence; still reversible, so still only rings. |
+| 4 | Tribonacci | ℤ³ | 1 | off | `b`, `c`, `a + b + c` | Three-term Fibonacci. |
+| 5 | Arnold's cat map | ℤ² | 2 | off | `a + b`, `a + 2b` | A classic chaotic map that is nonetheless a permutation. |
+| 6 | Period six | ℤ² | 2 | off | `b`, `b - a` | Every cycle length divides 6. Turn negatives on to see the wrap break that. |
+| 7 | Quarter turn | ℤ² | 1 | on | `b`, `-a` | Rotation by 90°: 4-cycles around a fixed origin. |
+| 8 | Swap | ℤ² | 1 | off | `b`, `a` | 2-cycles, with the diagonal as fixed points. |
+| 9 | Hénon | ℤ² | 2 | off | `b + 1 - a^2`, `a` | Reversible despite the square, so no trees. |
+| 10 | Step by 8 | ℤ | 3 | off | `a + 8` | Eight rings of 125. |
+| 11 | Full-period generator | ℤ | 3 | off | `21a + 1` | A random number generator that visits all 1000 states in one ring. |
+| 12 | Broken generator | ℤ | 3 | off | `6a + 1` | The multiplier shares a factor with 1000, so it stops being reversible. |
+| 13 | Times 3 | ℤ | 3 | off | `3a` | Reversible; ring lengths are the multiplicative orders of 3. |
+| 14 | Riffle shuffle | ℤ | 3 | off | `a/2 + 500(a mod 2)` | A perfect shuffle of 1000 cards, as a permutation. |
+| 15 | Digit rotation | ℤ | 3 | off | `(a mod 100)*10 + a/100` | Rotates the three digits: 3-cycles, with repdigits fixed. |
+
+### Collapsing maps (trees)
+
+| # | Name | Space | Digits | Negative | Formulas | What to look for |
+|---|---|---|---|---|---|---|
+| 16 | Doubling | ℤ | 3 | off | `2a` | Odd numbers are unreachable; shallow trees sit on rings. |
+| 17 | Times 5 | ℤ | 3 | off | `5a` | Like doubling but five-way branching. |
+| 18 | Halving | ℤ | 3 | off | `a / 2` | One binary tree draining into 0. |
+| 19 | Squaring | ℤ | 3 | off | `a^2` | Four fixed points (0, 1, 376, 625) plus a few short cycles. |
+| 20 | Cubing | ℤ | 3 | off | `a^3` | Compare its shape with squaring. |
+| 21 | Pollard's rho | ℤ | 4 | off | `a^2 + 1` | The map behind rho factoring: tails feeding small cycles. |
+| 22 | Lucas–Lehmer | ℤ | 3 | off | `a^2 - 2` | The step used in the Mersenne prime test. |
+| 23 | Triangular | ℤ | 3 | off | `a(a + 1)/2` | Sends a to the a-th triangular number. |
+| 24 | Logistic | ℤ | 3 | off | `a(999 - a)` | Integer logistic map; a and 999 − a always collide. |
+| 25 | Exponential | ℤ | 3 | off | `2^a` | Powers of two, wrapped. |
+| 26 | Self power | ℤ | 4 | off | `a^a` | Hundreds of small cycles, each with its own bushy tree. |
+| 27 | Power tower | ℤ² | 2 | off | `a^b`, `b` | b never changes, so each b draws its own power map. |
+| 28 | Quadratic pair | ℤ² | 2 | off | `b`, `a^2 + b` | The default: Fibonacci with a square. |
+| 29 | Product and sum | ℤ² | 2 | off | `a*b`, `a + b` | Multiplication collapses many states together. |
+| 30 | Averaging | ℤ² | 2 | off | `(a + b)/2`, `a` | Repeated averaging settles on the diagonal. |
+
+### Piecewise maps
+
+| # | Name | Space | Digits | Negative | Formulas | What to look for |
+|---|---|---|---|---|---|---|
+| 31 | Collatz | ℤ | 3 | off | `if(a mod 2 = 0, a/2, 3a + 1)` | The 3n+1 problem (large values wrap). |
+| 32 | Collatz shortcut | ℤ | 3 | off | `if(a mod 2 = 0, a/2, (3a + 1)/2)` | Each odd step is merged with the halving that follows. |
+| 33 | 5n + 1 | ℤ | 3 | off | `if(a mod 2 = 0, a/2, 5a + 1)` | The variant believed to have diverging orbits. |
+| 34 | Negative Collatz | ℤ | 3 | on | `if(a mod 2 = 0, a/2, 3a + 1)` | Negative numbers have their own extra cycles. |
+| 35 | Tent map | ℤ | 3 | off | `if(a < 500, 2a, 2(999 - a))` | Fold and stretch: every image has two preimages. |
+| 36 | Gingerbreadman | ℤ² | 2 | on | `1 - b + abs(a)`, `a` | A piecewise-linear chaotic map. |
+| 37 | Subtractive Euclid | ℤ² | 2 | off | `abs(a - b)`, `min(a, b)` | Euclid's algorithm: each state ends at (gcd, 0). |
+| 38 | Euclid | ℤ² | 2 | off | `b`, `a mod b` | The division form, ending in the pair (gcd, 0) ↔ (0, gcd). |
+| 39 | Sort | ℤ² | 2 | off | `min(a, b)`, `max(a, b)` | Every state is at most one step from a fixed point. |
+| 40 | Ducci (4) | ℤ⁴ | 1 | off | `abs(a - b)`, `abs(b - c)`, `abs(c - d)`, `abs(d - a)` | The difference game on four numbers always reaches all zeros. |
+| 41 | Ducci (3) | ℤ³ | 1 | off | `abs(a - b)`, `abs(b - c)`, `abs(c - a)` | With three numbers it gets stuck in 3-cycles instead. |
+
+### Digits
+
+| # | Name | Space | Digits | Negative | Formulas | What to look for |
+|---|---|---|---|---|---|---|
+| 42 | Digit append | ℤ² | 1 | off | `if(a + b < 10, b, 1)`, `(a + b) mod 10` | Append the sum of the last two digits: cycles 1123581347, 1459 and 00. |
+| 43 | Kaprekar (4) | ℤ | 4 | off | `desc(a) - asc(a)` | Everything drains into 6174 (or 0 for repdigits). |
+| 44 | Kaprekar (3) | ℤ | 3 | off | `desc(a) - asc(a)` | The three-digit constant is 495. |
+| 45 | Happy numbers | ℤ | 3 | off | `(a/100)^2 + (a/10 mod 10)^2 + (a mod 10)^2` | Sum of squared digits: happy numbers reach 1, the rest fall into an 8-cycle. |
+| 46 | Digit cubes | ℤ | 4 | off | `(a/1000)^3 + (a/100 mod 10)^3 + (a/10 mod 10)^3 + (a mod 10)^3` | Fixed points include 153, 370, 371 and 407. |
+| 47 | Self numbers | ℤ | 3 | off | `a + digitsum(a)` | The unreachable states are the self numbers (wrap-around reaches a few of them). |
+| 48 | Reverse and add | ℤ | 4 | off | `a + reverse(a)` | The palindrome (Lychrel) process, wrapped. |
+
+### Bitwise
+
+| # | Name | Space | Digits | Negative | Formulas | What to look for |
+|---|---|---|---|---|---|---|
+| 49 | Xorshift | ℤ | 4 | off | `a xor (a << 3) xor (a >> 2)` | The shape of a xorshift random generator. |
+| 50 | Xor Fibonacci | ℤ² | 2 | off | `b`, `a xor b` | Fibonacci with xor in place of plus: mostly 3-cycles. |
 
 ## Run
 
