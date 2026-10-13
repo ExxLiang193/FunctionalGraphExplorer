@@ -68,7 +68,8 @@ export default function App() {
   const [nonce, setNonce] = useState(0)
   const [collapsed, setCollapsed] = useState(false)
   // The graph only recomputes from `applied`, which changes on Submit (or Enter in a formula).
-  const [applied, setApplied] = useState({ dims: 2, digits: 2, negative: false, formulas: DEFAULTS[2] })
+  const [limit, setLimit] = useState(10000)
+  const [applied, setApplied] = useState({ dims: 2, digits: 2, negative: false, limit: 10000, formulas: DEFAULTS[2] })
   const [result, setResult] = useState(null) // { graph, stats }
   const [error, setError] = useState(null)
   const [progress, setProgress] = useState(null)
@@ -120,8 +121,8 @@ export default function App() {
     return { slots, legend }
   }, [result])
 
-  const dirty = dims !== applied.dims || digits !== applied.digits || negative !== applied.negative || formulas.some((f, i) => f !== applied.formulas[i])
-  const submit = (e) => { e.preventDefault(); if (dirty) { setError(null); setApplied({ dims, digits, negative, formulas }) } }
+  const dirty = dims !== applied.dims || digits !== applied.digits || negative !== applied.negative || limit !== applied.limit || formulas.some((f, i) => f !== applied.formulas[i])
+  const submit = (e) => { e.preventDefault(); if (dirty) { setError(null); setApplied({ dims, digits, negative, limit, formulas }) } }
   const setFormula = (i, v) => setByDims((m) => ({ ...m, [dims]: m[dims].map((f, j) => (j === i ? v : f)) }))
   const stats = result?.stats
   const P = 10 ** digits
@@ -137,7 +138,7 @@ export default function App() {
       rows.push(['Longest cycle', stats.longest.toLocaleString()])
       rows.push(['States on a cycle', `${stats.cyclic.toLocaleString()} · ${pct(stats.cyclic, N)}`])
       rows.push(['Unreachable states', `${stats.leaves.toLocaleString()} · ${pct(stats.leaves, N)}`])
-      if (stats.truncated) note = 'Counts cover the whole space. The view starts at a random state’s cycle and grows outward breadth-first through predecessors until 10,000 states.'
+      if (stats.truncated) note = `Counts cover the whole space. The view starts at a random state’s cycle and grows outward breadth-first through predecessors until ${stats.limit.toLocaleString()} states.`
     } else {
       if (stats.found) {
         rows.push(['Cycle found', `length ${stats.lambda.toLocaleString()}`])
@@ -221,6 +222,10 @@ export default function App() {
           <label className="flex cursor-pointer items-center gap-2 text-ink">
             <input type="checkbox" checked={negative} onChange={(e) => setNegative(e.target.checked)} className="h-3.5 w-3.5 accent-[#3987e5]" />
             Allow negative
+          </label>
+          <label className="flex items-center gap-2" title="Largest number of states drawn; bigger spaces are sampled">
+            Sample limit
+            <Segmented label="Sample state limit" value={limit} onChange={setLimit} options={[10000, 50000, 100000].map((n) => ({ value: n, label: `${n / 1000}k` }))} />
           </label>
         </div>
 

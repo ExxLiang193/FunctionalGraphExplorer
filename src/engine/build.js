@@ -2,12 +2,15 @@
 // forward-orbit sampling otherwise.
 import { compile } from './compile.js'
 
-export const BUDGET = 10000 // max nodes drawn
+export const DEFAULT_BUDGET = 10000 // default max nodes drawn (params.limit overrides)
+export const MAX_BUDGET = 100000
+export { DEFAULT_BUDGET as BUDGET }
 export const ENUM_LIMIT = 1 << 24 // max states we fully enumerate (12 bytes/state peak)
 const CHUNK = 1 << 17
 
 export function build(params, onProgress = () => {}) {
   const { dims, formulas } = params
+  const BUDGET = Math.min(MAX_BUDGET, params.limit ?? DEFAULT_BUDGET)
   const c = compile(formulas.slice(0, dims), params)
   const { R, lo } = c
   const Nbig = BigInt(R) ** BigInt(dims)
@@ -104,7 +107,7 @@ export function build(params, onProgress = () => {}) {
     return {
       m, coords, succ, flags,
       stats: {
-        ...base, mode: 'exact', truncated, shown: m,
+        ...base, mode: 'exact', truncated, shown: m, limit: BUDGET,
         cycles, cyclic, longest, leaves,
         census: [...census].sort((a, b) => a[0] - b[0]),
       },
@@ -185,7 +188,7 @@ export function build(params, onProgress = () => {}) {
     return {
       m, coords: coords.slice(0, m * dims), succ: succ.slice(0, m), flags: flags.slice(0, m),
       stats: {
-        ...base, mode: 'sampled', truncated: true, shown: m,
+        ...base, mode: 'sampled', truncated: true, shown: m, limit: BUDGET,
         found, lambda: found ? lam : null, mu: found ? mu : null, maxSteps,
       },
     }

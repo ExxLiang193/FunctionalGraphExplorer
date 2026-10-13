@@ -160,4 +160,14 @@ for (const p of [
   const s = g.stats
   console.log(`${p.formulas.join(' | ')} d=${p.digits} neg=${p.negative}: N=${s.totalStates} ${s.mode} m=${g.m} comps=${L.compR.length} cycles=${s.cycles ?? '?'} longest=${s.longest ?? s.lambda} tiers=${s.tiers} build=${(t1 - t0).toFixed(0)}ms layout=${(t2 - t1).toFixed(0)}ms span=${(L.bounds[2] - L.bounds[0]).toFixed(0)}`)
 }
+// --- sample limit ---
+for (const limit of [50000, 100000]) {
+  g = build({ dims: 2, digits: 3, negative: false, formulas: ['b', 'a^2+b'], limit })
+  assert.equal(g.m, limit)
+  const t = performance.now()
+  const L = layout(g.m, g.succ)
+  assert.equal(new Set(L.order).size, g.m)
+  console.log(`limit ${limit}: layout ${(performance.now() - t).toFixed(0)}ms comps=${L.compR.length}`)
+}
+assert.equal(build({ dims: 2, digits: 2, negative: true, formulas: ['b', 'a+b'], limit: 50000 }).m, 39601)
 console.log('ok')

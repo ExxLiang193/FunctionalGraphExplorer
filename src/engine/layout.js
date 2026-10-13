@@ -212,6 +212,7 @@ export function layout(m, succ) {
   const compSize = new Int32Array(nc), compRing = new Int32Array(nc), compClosed = new Uint8Array(nc)
   const compRingR = new Float32Array(nc)
   const keys = new Float64Array(m)
+  const KEY = 2 ** Math.ceil(Math.log2(m + 1)) // sort key = (component, level) * KEY + node id, exact in float64
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (let i = 0; i < nc; i++) {
     const k = circles[i]
@@ -222,7 +223,7 @@ export function layout(m, succ) {
       const v = ord[q]
       comp[v] = i; x[v] += k.x; y[v] += k.y
       // draw order: by component, deepest first so cycle nodes paint on top
-      keys[v] = (i * 8 + (7 - level[v])) * 16384 + v
+      keys[v] = (i * 8 + (7 - level[v])) * KEY + v
     }
     if (k.x - k.r < minX) minX = k.x - k.r
     if (k.x + k.r > maxX) maxX = k.x + k.r
@@ -231,7 +232,7 @@ export function layout(m, succ) {
   }
   keys.sort()
   const order = new Uint32Array(m)
-  for (let i = 0; i < m; i++) order[i] = keys[i] % 16384
+  for (let i = 0; i < m; i++) order[i] = keys[i] % KEY
 
   // ---- 6. edge polylines (child -> parent), flattened: edge v owns points [edgeOff[v], edgeOff[v+1])
   const edgeOff = new Uint32Array(m + 1)
