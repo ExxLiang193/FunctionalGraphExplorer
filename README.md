@@ -20,7 +20,7 @@ Examples: Collatz `if(a mod 2 = 0, a/2, 3a + 1)`, Kaprekar `desc(a) - asc(a)`, t
 
 - Hue = length of the cycle a basin drains into; brightness fades with distance from the cycle.
 - Layout is planar: cycles on circles, trees on rings around them.
-- Spaces over the sample limit (10k, 50k or 100k states) show a sample of that size grown breadth-first from a random cycle; spaces too large to enumerate (over ~16.7M states) show forward orbits only.
+- Spaces over the sample limit (10k, 50k or 100k states) show a sample of that size grown breadth-first from a random cycle. Spaces over 1,000,000 states cannot be submitted.
 
 ## 50 examples to try
 

@@ -27,6 +27,7 @@ const SYNTAX = [
   'digitsum reverse digits concat asc desc',
   'and or xor << >>',
 ]
+const MAX_STATES = 1_000_000 // largest space the form will submit
 const SUP = ['', '', '²', '³', '⁴']
 const sup = (n) => String(n).replace(/\d/g, (d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d])
 
@@ -122,7 +123,9 @@ export default function App() {
   }, [result])
 
   const dirty = dims !== applied.dims || digits !== applied.digits || negative !== applied.negative || limit !== applied.limit || formulas.some((f, i) => f !== applied.formulas[i])
-  const submit = (e) => { e.preventDefault(); if (dirty) { setError(null); setApplied({ dims, digits, negative, limit, formulas }) } }
+  const stateCount = BigInt(negative ? 2 * 10 ** digits - 1 : 10 ** digits) ** BigInt(dims)
+  const tooBig = stateCount > BigInt(MAX_STATES)
+  const submit = (e) => { e.preventDefault(); if (dirty && !tooBig) { setError(null); setApplied({ dims, digits, negative, limit, formulas }) } }
   const setFormula = (i, v) => setByDims((m) => ({ ...m, [dims]: m[dims].map((f, j) => (j === i ? v : f)) }))
   const stats = result?.stats
   const P = 10 ** digits
@@ -252,12 +255,18 @@ export default function App() {
         <div className="mt-3.5 flex items-center gap-3">
           <button
             type="submit"
-            disabled={!dirty}
+            disabled={!dirty || tooBig}
             className="rounded-md bg-[#3987e5] px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#4f96ea] disabled:cursor-default disabled:bg-white/10 disabled:text-ink-3"
           >
             Submit
           </button>
-          {dirty && <span className="text-[11px] text-ink-3">Unapplied changes</span>}
+          {tooBig ? (
+            <span className="text-[11px] text-[#e66767]">
+              {formatCount(stateCount)} states is over the {MAX_STATES.toLocaleString()} limit. Lower the digits or the dimension.
+            </span>
+          ) : (
+            dirty && <span className="text-[11px] text-ink-3">Unapplied changes</span>
+          )}
         </div>
       </form>
 
