@@ -216,6 +216,7 @@ export default function App() {
           <span className="text-ink-3">▸</span>
           <span className="truncate">
             ({VAR_NAMES.slice(0, applied.dims).join(', ')}) → ({applied.formulas.join(', ')})
+            <span className="text-ink-3"> mod {(applied.modulus ?? 10 ** applied.digits).toLocaleString()}{applied.negative ? ' ±' : ''}</span>
           </span>
           {error && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#e66767]" />}
         </button>
