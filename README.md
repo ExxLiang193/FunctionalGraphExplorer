@@ -8,7 +8,7 @@
 
 Visualizes the directed graph of an integer map `(a, b, …) → (A, B, …)` on a finite space: every state has one successor, so each component is a cycle with trees feeding into it.
 
-Enter formulas using the variables `a b c d e` and the operations below, choose the dimension (ℤ to ℤ⁵), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count. The dice button fills in a random space and random formulas (at most 9 symbols each, at most 1,000,000 states).
+Enter formulas using the variables `a b c d e` and the operations below, choose the dimension (ℤ to ℤ⁵), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count, or to any modulus you type in the "or modulus" box (a prime such as 997, a power of two such as 4096, …). The Examples menu next to Submit loads any configuration listed below. The dice button fills in a random space and random formulas (at most 9 symbols each, at most 1,000,000 states).
 
 ## Operations
 
@@ -16,8 +16,9 @@ Enter formulas using the variables `a b c d e` and the operations below, choose 
 |---|---|
 | Arithmetic | `+ - * ^`, `/` or `div` (rounds down), `mod` |
 | Tests (give 1 or 0) | `< <= > >= = !=`, `if(test, x, y)` |
-| Numeric | `abs(x)`, `min(x, y, …)`, `max(…)`, `gcd(…)` |
-| Digits | `digitsum(x)`, `reverse(x)`, `digits(x)` (count), `concat(x, y)`, `asc(x)`, `desc(x)` (sorted digits; `desc` pads to the digit setting) |
+| Numeric | `abs(x)`, `sign(x)`, `min(x, y, …)`, `max(…)`, `gcd(…)`, `lcm(…)`, `isqrt(x)` (square root, rounded down), `log2(x)` (rounded down) |
+| Digits | `digitsum(x)`, `reverse(x)`, `digits(x)` (count), `concat(x, y)`, `asc(x)`, `desc(x)` (sorted digits; `desc` pads to the digit setting), `digitprod(x)`, `digit(x, i)` (i = 0 is the units digit) |
+| Number theory | `sigma(x)` (sum of divisors), `phi(x)` (Euler's totient), `spf(x)` (smallest prime factor), `isprime(x)` |
 | Bitwise | `and`, `or`, `xor`, `<<`, `>>` |
 
 Examples: Collatz `if(a mod 2 = 0, a/2, 3a + 1)`, Kaprekar `desc(a) - asc(a)`, the digit-append Fibonacci `(if(a+b < 10, b, 1), (a+b) mod 10)`.
@@ -131,6 +132,23 @@ These use the Sample limit setting. Spaces up to the limit are drawn whole; rows
 | 64 | Tribonacci mod 100 | ℤ³ | 2 | off | 100k | `b`, `c`, `a + b + c` | Reversible: a sample of its 1,260 rings. |
 | 65 | Fibonacci mod 1000 | ℤ² | 3 | off | 100k | `b`, `a + b` | A sample of its 1,372 rings, the longest 1,500. |
 | 66 | Ducci (5) | ℤ⁵ | 1 | off | 100k | `abs(a - b)`, `abs(b - c)`, `abs(c - d)`, `abs(d - e)`, `abs(e - a)` | With five numbers the difference game falls into nine 15-cycles (or all zeros). |
+
+### Number theory and custom modulus
+
+A Digits entry of `mod N` means: type N into the "or modulus" box.
+
+| # | Name | Space | Digits | Negative | Formulas | What to look for |
+|---|---|---|---|---|---|---|
+| 67 | Aliquot | ℤ | 4 | off | `sigma(a) - a` | Sum of proper divisors: perfect numbers are fixed points, amicable pairs such as 220 and 284 are 2-cycles. |
+| 68 | Totient | ℤ | 4 | off | `phi(a)` | One tree draining into the fixed point 1 (0 stays at 0). |
+| 69 | Prime peeling | ℤ | 4 | off | `a / spf(a)` | Strips one prime factor per step, so everything ends at 1. |
+| 70 | Juggler | ℤ | 4 | off | `if(a mod 2 = 0, isqrt(a), isqrt(a^3))` | The juggler sequence, a square-root relative of Collatz. |
+| 71 | Multiplicative persistence | ℤ | 4 | off | `digitprod(a)` | Multiplicative persistence: every number collapses onto one of the ten single digits. |
+| 72 | Root-paced growth | ℤ | 4 | off | `a + isqrt(a)` | Two long cycles (194 and 372) and almost no unreachable states. |
+| 73 | Rho over a prime field | ℤ | mod 997 | off | `a^2 + 1` | Five cycles over a prime field; compare example 21, where a single 6-cycle takes everything. |
+| 74 | 12-bit xorshift | ℤ | mod 4096 | off | `a xor (a << 3) xor (a >> 2)` | With a power-of-two modulus the shifts wrap as they do in hardware; half the states are unreachable. |
+| 75 | Fibonacci over a prime field | ℤ² | mod 97 | off | `b`, `a + b` | Only rings: 48 of length 196 around the fixed origin. |
+| 76 | lcm and gcd | ℤ² | 2 | off | `lcm(a, b)`, `gcd(a, b)` | Collapses onto 573 fixed points. |
 
 ### Digit append with longer blocks
 
