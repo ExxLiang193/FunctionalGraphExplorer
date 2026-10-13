@@ -20,7 +20,7 @@ Examples: Collatz `if(a mod 2 = 0, a/2, 3a + 1)`, Kaprekar `desc(a) - asc(a)`, t
 
 - Hue = length of the cycle a basin drains into; brightness fades with distance from the cycle.
 - Layout is planar: cycles on circles, trees on rings around them.
-- Spaces over 10,000 states show a 10,000-state sample grown breadth-first from a random cycle; spaces too large to enumerate (over ~16.7M states) show forward orbits only.
+- Spaces over the sample limit (10k, 50k or 100k states) show a sample of that size grown breadth-first from a random cycle; spaces too large to enumerate (over ~16.7M states) show forward orbits only.
 
 ## 50 examples to try
 
@@ -100,6 +100,28 @@ Set the space, digits and negatives as listed, type the formulas, and press Subm
 |---|---|---|---|---|---|---|
 | 49 | Xorshift | ℤ | 4 | off | `a xor (a << 3) xor (a >> 2)` | The shape of a xorshift random generator. |
 | 50 | Xor Fibonacci | ℤ² | 2 | off | `b`, `a xor b` | Fibonacci with xor in place of plus: mostly 3-cycles. |
+
+### Larger views
+
+These use the Sample limit setting. Spaces up to the limit are drawn whole; the last four are samples of million-state spaces.
+
+| # | Name | Space | Digits | Negative | Limit | Formulas | What to look for |
+|---|---|---|---|---|---|---|---|
+| 51 | Kaprekar (5) | ℤ | 5 | off | 100k | `desc(a) - asc(a)` | No single constant at five digits: one 2-cycle and two 4-cycles (plus 0). |
+| 52 | Collatz to 99,999 | ℤ | 5 | off | 100k | `if(a mod 2 = 0, a/2, 3a + 1)` | All 100,000 states: everything outside 0 drains into the 4 → 2 → 1 loop. |
+| 53 | Pollard's rho (5) | ℤ | 5 | off | 100k | `a^2 + 1` | A single 6-cycle collects every state. |
+| 54 | Happy numbers (5) | ℤ | 5 | off | 100k | `(a/10000)^2 + (a/1000 mod 10)^2 + (a/100 mod 10)^2 + (a/10 mod 10)^2 + (a mod 10)^2` | Still just 1 and the 8-cycle; almost every state is unreachable. |
+| 55 | Self numbers (5) | ℤ | 5 | off | 100k | `a + digitsum(a)` | One long cycle of 4,735 fed by thousands of short tails. |
+| 56 | Reverse and add (5) | ℤ | 5 | off | 100k | `a + reverse(a)` | Six cycles of length 44 (plus 0). |
+| 57 | Xorshift (5) | ℤ | 5 | off | 100k | `a xor (a << 3) xor (a >> 2)` | Seven cycles, the longest 162. |
+| 58 | Gingerbreadman, whole | ℤ² | 2 | on | 50k | `1 - b + abs(a)`, `a` | The whole space at once: 76 cycles, the longest 624. |
+| 59 | Signed Fibonacci | ℤ² | 2 | on | 50k | `b`, `a + b` | With negatives the wrap is no longer reversible: a quarter of the states become unreachable. |
+| 60 | Quarter turn (2) | ℤ² | 2 | on | 50k | `b`, `-a` | 9,900 four-cycles around the origin. |
+| 61 | Negative Collatz (4) | ℤ | 4 | on | 50k | `if(a mod 2 = 0, a/2, 3a + 1)` | All five cycles of the signed 3n+1 map in one picture. |
+| 62 | Digit append, 3-digit blocks | ℤ² | 3 | off | 100k | `a*10^digits(a+b) + concat(b, a+b)/1000`, `concat(b, a+b)` | A 100k sample of a million states; the full space has eight cycles, the longest 335. |
+| 63 | Quadratic pair (3) | ℤ² | 3 | off | 100k | `b`, `a^2 + b` | The full space has 234 cycles; use Resample to tour different basins. |
+| 64 | Tribonacci mod 100 | ℤ³ | 2 | off | 100k | `b`, `c`, `a + b + c` | Reversible: a sample of its 1,260 rings. |
+| 65 | Fibonacci mod 1000 | ℤ² | 3 | off | 100k | `b`, `a + b` | A sample of its 1,372 rings, the longest 1,500. |
 
 ### Digit append with longer blocks
 
