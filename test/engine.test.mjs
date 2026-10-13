@@ -84,6 +84,11 @@ for (const bad of ['a+c', 'a+', '(a', 'abs()', 'abs(a,b)', 'if(a,b)', 'a ! b', '
 
 // --- the digit-append Fibonacci from the README: cycles 1123581347, 1459 and 00 ---
 assert.deepEqual(build({ dims: 2, digits: 1, negative: false, formulas: ['if(a+b<10, b, 1)', '(a+b) mod 10'] }).stats.census, [[1, 1], [3, 1], [8, 1]])
+// --- its k-digit generalisation: 6 cycles for 2-digit blocks, 8 for 3-digit blocks (brute-forced independently) ---
+for (const [digits, cycles] of [[1, 3], [2, 6], [3, 8]]) {
+  const formulas = [`a*10^digits(a+b) + concat(b, a+b)/${10 ** digits}`, 'concat(b, a+b)']
+  assert.equal(build({ dims: 2, digits, negative: false, formulas }).stats.cycles, cycles)
+}
 // --- Kaprekar: every 4-digit number with two distinct digits reaches 6174 ---
 {
   const k = build({ dims: 1, digits: 4, negative: false, formulas: ['desc(a) - asc(a)'] })

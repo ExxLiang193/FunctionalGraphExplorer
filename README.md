@@ -101,6 +101,24 @@ Set the space, digits and negatives as listed, type the formulas, and press Subm
 | 49 | Xorshift | ℤ | 4 | off | `a xor (a << 3) xor (a >> 2)` | The shape of a xorshift random generator. |
 | 50 | Xor Fibonacci | ℤ² | 2 | off | `b`, `a xor b` | Fibonacci with xor in place of plus: mostly 3-cycles. |
 
+### Digit append with longer blocks
+
+Example 42 is the 1-digit case of this rule: take the last two k-digit blocks of a string, add them, append the sum, repeat (`11 34` → `113445` → `11344579` → …). For any block size k, set the space to ℤ², Digits to k, and use
+
+```
+a*10^digits(a+b) + concat(b, a+b) / 10^k
+concat(b, a+b)
+```
+
+with `10^k` written out:
+
+| Digits | Formulas | Cycles |
+|---|---|---|
+| 2 | `a*10^digits(a+b) + concat(b, a+b)/100`, `concat(b, a+b)` | 6 |
+| 3 | `a*10^digits(a+b) + concat(b, a+b)/1000`, `concat(b, a+b)` | 8 |
+
+`concat(b, a+b)` writes the sum after the last block; wrapping to k digits keeps the new last block, and the first formula does the same one block higher. The cycle counts include the all-zeros fixed point.
+
 ## Run
 
 ```bash
