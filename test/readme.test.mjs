@@ -5,7 +5,8 @@ import { build } from '../src/engine/build.js'
 import { layout } from '../src/engine/layout.js'
 
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
-const rows = readme.split('\n').filter((l) => /^\| \d+ \|/.test(l))
+// numbered example rows only: | # | Name | Space | Digits | Negative | Formulas | Note |
+const rows = readme.split('\n').filter((l) => /^\| \d+ \|/.test(l) && l.split('|').length === 9)
 assert.equal(rows.length, 50)
 for (const row of rows) {
   const [, num, name, space, digits, negative, formulas] = row.split('|').map((s) => s.trim())
