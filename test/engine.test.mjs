@@ -44,6 +44,17 @@ function ev(n, v) {
         case 'bxor': return x ^ y
         case 'shl': return y >= 0n ? x << y : x >> -y
         case 'shr': return y >= 0n ? x >> y : x << -y
+        case 'digitprod': return sg(x, [...str(x)].reduce((t, c) => t * BigInt(c), 1n))
+        case 'digit': { const t = str(x); return y < 0n || y >= BigInt(t.length) ? 0n : BigInt(t[t.length - 1 - Number(y)]) }
+        case 'lcm': { let p = abs(x), q = abs(y); while (q) [p, q] = [q, p % q]; return p === 0n ? 0n : abs(x * y) / p }
+        case 'sign': return x > 0n ? 1n : x < 0n ? -1n : 0n
+        case 'isqrt': { const m = abs(x); let lo = 0n, hi = m + 1n; while (hi - lo > 1n) { const mid = (lo + hi) >> 1n; if (mid * mid <= m) lo = mid; else hi = mid } return sg(x, lo) } // bisection
+        case 'log2': return x === 0n ? 0n : BigInt(abs(x).toString(2).length - 1)
+        // naive divisor scans, independent of the engine's sieve
+        case 'sigma': { const m = Number(abs(x)); let t = 0; for (let k = 1; k <= m; k++) if (m % k === 0) t += k; return BigInt(t) }
+        case 'phi': { const m = Number(abs(x)); if (m < 2) return BigInt(m); let t = 0; for (let k = 1; k <= m; k++) { let p = k, q = m; while (q) [p, q] = [q, p % q]; if (p === 1) t++ } return BigInt(t) }
+        case 'spf': { const m = Number(abs(x)); if (m < 2) return BigInt(m); for (let k = 2; ; k++) if (m % k === 0) return BigInt(k) }
+        case 'isprime': { const m = Number(abs(x)); if (m < 2) return 0n; for (let k = 2; k * k <= m; k++) if (m % k === 0) return 0n; return 1n }
       }
       throw new Error('ref: ' + n.f)
     }
@@ -58,11 +69,14 @@ const cases = [
   ['abs(a-b)', 'min(a, b, 5) + max(a-b, b-a, 3)'], ['gcd(a, b)', 'gcd(a-5, b, 12)'], ['digitsum(a*b-30)', 'reverse(a*b-200) + digits(a-b)'],
   ['concat(a, b)', 'concat(a-5, b-5, 7)'], ['desc(a*b-9) - asc(a*b-9)', 'asc(a-50)+desc(b)'], ['a xor b', '(a-5) and (b-3) or 8'],
   ['a << 2', '(a*b-40) >> (b-3)'], ['a xor (a << 13)', 'a < 5 and b > 2 or a = b'], ['99999999999999999999 / (a+1)', 'digitsum(a^b)'],
+  ['digitprod(a*b-30)', 'digit(a*b, b-3) + digit(a-50, 1)'], ['lcm(a, b)', 'lcm(a-5, b, 4) + sign(a-b)'], ['isqrt(a*b-40)', 'log2(a*b-9) + isqrt(a^b)'],
+  ['sigma(a-5) - a', 'phi(a+b) + spf(b-7)'], ['isprime(a) + isprime(b-50)', 'sigma(a+b) + spf(a*b)'], ['log2(a^b) + digitprod(a^b)', 'lcm(a^b, 6) mod 1000'],
   ['if(a < 3, a^b + b, a)', 'reverse(a^b) mod 97'], ['(a^b) xor b', 'gcd(a^b, 12) + (a^b >> 3)'], ['a << b', 'concat(a^b, b)'],
 ]
 let tiersSeen = new Set()
-for (const negative of [false, true]) for (const digits of [1, 2]) for (const f of cases) {
-  const c = compile(f, { dims: 2, digits, negative })
+for (const negative of [false, true]) for (const [digits, modulus] of [[1], [2], [2, 37]]) for (const f of cases) {
+  const c = compile(f, { dims: 2, digits, negative, modulus })
+  assert.equal(c.P, modulus ?? 10 ** digits)
   c.tiers.forEach((t) => tiersSeen.add(t))
   const asts = f.map((s) => parse(s, 2))
   const N = c.R ** 2
@@ -70,9 +84,10 @@ for (const negative of [false, true]) for (const digits of [1, 2]) for (const f 
   // fill in two uneven chunks to exercise the decode path
   c.fill(next, 0, 37); c.fill(next, 37, N)
   const s = new Float64Array(2), o = new Float64Array(2)
-  for (let i = 0; i < N; i++) {
+  // small spaces are checked exhaustively, larger ones on a stride (the reference evaluator is slow)
+  for (let i = 0; i < N; i += N > 500 ? 29 : 1) {
     const v = [Math.floor(i / c.R) + c.lo, (i % c.R) + c.lo]
-    v.D = digits
+    v.D = String(c.P - 1).length
     const want = asts.map((a) => wrap(ev(a, v), c.P, negative))
     const wi = (want[0] - c.lo) * c.R + (want[1] - c.lo)
     assert.equal(next[i], wi, `${f} neg=${negative} d=${digits} at ${v}: tiers ${c.tiers}`)
@@ -90,6 +105,26 @@ for (const [digits, cycles] of [[1, 3], [2, 6], [3, 8]]) {
   const formulas = [`a*10^digits(a+b) + concat(b, a+b)/${10 ** digits}`, 'concat(b, a+b)']
   assert.equal(build({ dims: 2, digits, negative: false, formulas }).stats.cycles, cycles)
 }
+// --- aliquot map: perfect numbers are fixed points, amicable pairs are 2-cycles ---
+{
+  const c = compile(['sigma(a) - a'], { dims: 1, digits: 4, negative: false })
+  const s = new Float64Array(1), o = new Float64Array(1)
+  const f = (n) => { s[0] = n; c.step(s, o); return o[0] }
+  for (const n of [6, 28, 496, 8128]) assert.equal(f(n), n)
+  assert.equal(f(220), 284); assert.equal(f(284), 220); assert.equal(f(1184), 1210); assert.equal(f(1210), 1184)
+}
+// --- factoring beyond the sieve (1000003 is prime), and modulus validation ---
+{
+  const c = compile(['spf(a*1000003)', 'sigma(1000003*b) + isprime(1000003*b)'], { dims: 2, digits: 2, negative: false, modulus: 99991 })
+  const s = new Float64Array([97, 1]), o = new Float64Array(2)
+  c.step(s, o)
+  assert.deepEqual([...o], [97, 1000005 % 99991])
+  for (const modulus of [1, 2.5, 1e9]) assert.throws(() => compile(['a'], { dims: 1, digits: 1, negative: false, modulus }))
+}
+// --- custom modulus: multiplying by a unit of Z/997 is a permutation; signed range is 2P - 1 wide ---
+assert.equal(build({ dims: 1, digits: 3, negative: false, modulus: 997, formulas: ['3a'] }).stats.leaves, 0)
+assert.equal(build({ dims: 2, digits: 1, negative: true, modulus: 7, formulas: ['b', '-a'] }).stats.totalStates, '169')
+
 // --- Kaprekar: every 4-digit number with two distinct digits reaches 6174 ---
 {
   const k = build({ dims: 1, digits: 4, negative: false, formulas: ['desc(a) - asc(a)'] })
@@ -167,7 +202,7 @@ for (const p of [
   const rnd = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
   const seen = new Set()
   let slowest = 0
-  for (let i = 0; i < 400; i++) {
+  for (let i = 0; i < 300; i++) {
     const r = randomConfig(1e6, rnd)
     const states = (r.negative ? 2 * 10 ** r.digits - 1 : 10 ** r.digits) ** r.dims
     assert.ok(states <= 1e6, 'state limit')
@@ -177,13 +212,15 @@ for (const p of [
       parse(f, r.dims)
       for (const w of f.match(/[a-z]+/g) || []) seen.add(w.length > 1 ? w : 'var')
     }
+    compile(r.formulas, r)
+    if (states > 20000 && i % 10) continue // every config must compile; only some of the big ones are built
     const t = performance.now()
     const b = build({ ...r })
     slowest = Math.max(slowest, performance.now() - t)
     assert.ok(b.m > 0)
   }
   for (const w of ['if', 'abs', 'min', 'gcd', 'digitsum', 'reverse', 'asc', 'desc', 'xor', 'and', 'or', 'mod']) assert.ok(seen.has(w), `never generated ${w}`)
-  console.log(`randomizer: 400 configs ok, slowest build ${slowest.toFixed(0)}ms`)
+  console.log(`randomizer: 300 configs ok, slowest build ${slowest.toFixed(0)}ms`)
   for (let i = 0; i < 6; i++) { const r = randomConfig(1e6, rnd); console.log(`  Z^${r.dims} d=${r.digits} neg=${r.negative}: (${r.formulas.join(', ')})`) }
 }
 

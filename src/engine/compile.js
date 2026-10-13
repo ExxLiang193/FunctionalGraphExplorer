@@ -52,6 +52,20 @@ const FN = {
     bounds: (x, D) => signed(Math.max(10 * mag(x), 10 ** D), x),
     float: (x, D) => `desc(${x},${D})`, big: (x, D) => `bdesc(${x},${D})`, ctx: true,
   },
+  digitprod: { bounds: (x) => signed(mag(x), x), float: call('digitprod'), big: call('bdigitprod') },
+  digit: { bounds: () => [0, 9], float: call('digit'), big: call('bdigit') }, // digit(x, i): i = 0 is the units digit
+  lcm: { bounds: (l, r) => [0, mag(l) * mag(r)], float: call('lcm'), big: call('blcm') },
+  sign: {
+    bounds: (x) => [x.lo < 0 ? -1 : x.lo > 0 ? 1 : 0, x.hi > 0 ? 1 : x.hi < 0 ? -1 : 0],
+    float: call('Math.sign'), big: (x) => `BigInt(bcmp0(${x}))`,
+  },
+  isqrt: { bounds: (x) => signed(Math.ceil(Math.sqrt(mag(x))), x), float: call('isqrt'), big: call('bisqrt') }, // keeps the sign of x
+  log2: { bounds: (x) => [0, Math.ceil(Math.log2(mag(x) + 1))], float: call('flog2'), big: call('blog2') }, // floor(log2 |x|), 0 at 0
+  // number-theoretic functions act on |x|
+  sigma: { bounds: (x) => [0, mag(x) * (Math.log(mag(x) + 1) + 1)], float: call('sigma'), big: (x) => `BigInt(sigma(small(${x})))` },
+  phi: { bounds: (x) => [0, mag(x)], float: call('phi'), big: (x) => `BigInt(phi(small(${x})))` },
+  spf: { bounds: (x) => [0, mag(x)], float: call('spf'), big: (x) => `BigInt(spf(small(${x})))` },
+  isprime: { bounds: bool, float: call('isprime'), big: (x) => `BigInt(isprime(small(${x})))` },
   // bitwise operators use two's complement for negatives; a negative shift count reverses direction
   band: { bounds: bitwise, float: call('band'), big: (l, r) => `(${l}&${r})` },
   bor: { bounds: bitwise, float: call('bor'), big: (l, r) => `(${l}|${r})` },
@@ -228,19 +242,106 @@ function bshl(x, n) {
   if (n > 4000000n) { if (x === 0n) return 0n; throw new Error('Intermediate value too large to evaluate exactly') }
   return n < -4000000n ? (x < 0n ? -1n : 0n) : x << n
 }
+function digitprod(x) { let m = Math.abs(x), r = m > 0 ? 1 : 0; while (m > 0) { r *= m % 10; m = Math.floor(m / 10) } return x < 0 ? -r : r }
+function digit(x, i) { return i < 0 || i > 22 ? 0 : Math.floor(Math.abs(x) / P10[i]) % 10 }
+function bdigitprod(x) { let r = 1n; for (const c of bstr(x)) r *= BigInt(c.charCodeAt(0) - 48); return x < 0n ? -r : r }
+function bdigit(x, i) { const s = bstr(x); return i < 0n || i >= BigInt(s.length) ? 0n : BigInt(s.charCodeAt(s.length - 1 - Number(i)) - 48) }
+function lcm(x, y) { const g = gcd(x, y); return g === 0 ? 0 : Math.abs((x / g) * y) }
+function blcm(x, y) { const g = bgcd(x, y); return g === 0n ? 0n : babs((x / g) * y) }
+const bcmp0 = (x) => (x > 0n ? 1 : x < 0n ? -1 : 0)
+function isqrt(x) {
+  const m = Math.abs(x)
+  let r = Math.floor(Math.sqrt(m))
+  while (r * r > m) r--
+  while ((r + 1) * (r + 1) <= m) r++
+  return x < 0 ? -r : r
+}
+function bisqrt(x) {
+  const m = babs(x)
+  if (m < 2n) return x
+  let r = 1n << BigInt((m.toString(2).length + 1) >> 1) // Newton from above converges monotonically
+  for (;;) { const n = (r + m / r) >> 1n; if (n >= r) break; r = n }
+  return x < 0n ? -r : r
+}
+function flog2(x) { let m = Math.abs(x), n = 0; while (m >= 2) { m = Math.floor(m / 2); n++ } return n }
+const blog2 = (x) => (x === 0n ? 0n : BigInt(babs(x).toString(2).length - 1))
+
+// Factorisation: a smallest-prime-factor sieve (built on first use) covers arguments up to SIEVE;
+// larger ones are trial-divided down into its range.
+const SIEVE = 1 << 21
+const FACTOR_MAX = 1e12
+let SPF = null
+function sieve() {
+  SPF = new Uint32Array(SIEVE + 1)
+  for (let i = 2; i <= SIEVE; i++) {
+    if (SPF[i]) continue
+    for (let j = i; j <= SIEVE; j += i) if (!SPF[j]) SPF[j] = i
+  }
+}
+// Calls f(p, e) for every prime power p^e exactly dividing n >= 2.
+function factor(n, f) {
+  if (n > FACTOR_MAX) throw new Error('sigma/phi/spf/isprime: argument too large to factor')
+  if (!SPF) sieve()
+  for (let p = 2; n > SIEVE && p * p <= n; p += p === 2 ? 1 : 2) {
+    if (n % p) continue
+    let e = 0
+    do { n /= p; e++ } while (n % p === 0)
+    f(p, e)
+  }
+  if (n > SIEVE) { f(n, 1); return } // what is left is prime
+  while (n > 1) {
+    const p = SPF[n]
+    let e = 0
+    do { n /= p; e++ } while (n % p === 0)
+    f(p, e)
+  }
+}
+function sigma(x) {
+  const n = Math.abs(x)
+  if (n < 2) return n
+  let s = 1
+  factor(n, (p, e) => { let t = 1, q = 1; for (let i = 0; i < e; i++) { q *= p; t += q } s *= t })
+  return s
+}
+function phi(x) {
+  const n = Math.abs(x)
+  if (n < 2) return n
+  let r = n
+  factor(n, (p) => { r = (r / p) * (p - 1) })
+  return r
+}
+function spf(x) {
+  const n = Math.abs(x)
+  if (n < 2) return n
+  if (n <= SIEVE) { if (!SPF) sieve(); return SPF[n] }
+  let least = 0
+  factor(n, (p) => { if (!least) least = p })
+  return least
+}
+function isprime(x) { const n = Math.abs(x); return n > 1 && spf(n) === n ? 1 : 0 }
+function small(x) {
+  const m = babs(x)
+  if (m > BigInt(FACTOR_MAX)) throw new Error('sigma/phi/spf/isprime: argument too large to factor')
+  return Number(m)
+}
 const HELPERS = {
+  digitprod, digit, bdigitprod, bdigit, lcm, blcm, bcmp0, isqrt, bisqrt, flog2, blog2, sigma, phi, spf, isprime, small,
   ipow, emod, bmod, bpow, fdiv, bdiv, gcd, bgcd, babs, bmin, bmax,
   digitsum, reverse, ndigits, concat, asc, desc, bdigitsum, breverse, bndigits, bconcat, basc, bdesc,
   band, bor, bxor, shl, bshl,
 }
 
 /**
+ * `modulus` (optional) replaces 10^digits as the wrap-around modulus.
  * @returns {{ tiers: string[], fill(next, from, to), step(src, dst) }}
  *   fill writes next[i] for state indices [from, to); step maps one coordinate tuple.
  *   State index = sum_i (v_i - lo) * R^(n-1-i).
  */
-export function compile(formulas, { dims, digits, negative }) {
-  const P = 10 ** digits
+export function compile(formulas, { dims, digits, negative, modulus }) {
+  // Values live in [0, P) (or (-P, P) with negatives); P is 10^digits unless a custom modulus is given.
+  const P = modulus ?? 10 ** digits
+  if (!Number.isInteger(P) || P < 2 || P > 9e7) throw new Error('Modulus must be a whole number from 2 to 90,000,000')
+  digits = String(P - 1).length // width used by desc() padding
   const lo = negative ? -(P - 1) : 0
   const hi = P - 1
   const R = hi - lo + 1

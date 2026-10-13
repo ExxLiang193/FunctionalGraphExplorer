@@ -18,6 +18,8 @@ export const VAR_NAMES = ['a', 'b', 'c', 'd', 'e']
 export const FUNCTIONS = {
   if: [3, 3], abs: [1, 1], min: [2, 9], max: [2, 9], gcd: [2, 9],
   digitsum: [1, 1], reverse: [1, 1], digits: [1, 1], concat: [2, 9], asc: [1, 1], desc: [1, 1],
+  digitprod: [1, 1], digit: [2, 2], lcm: [2, 9], sign: [1, 1], isqrt: [1, 1], log2: [1, 1],
+  sigma: [1, 1], phi: [1, 1], spf: [1, 1], isprime: [1, 1],
 }
 const WORD_OPS = ['mod', 'div', 'xor', 'and', 'or']
 const WORDS = [...Object.keys(FUNCTIONS), ...WORD_OPS].sort((p, q) => q.length - p.length)
@@ -27,7 +29,7 @@ const CMP = { '<': 'lt', '<=': 'le', '>': 'gt', '>=': 'ge', '=': 'eq', '!=': 'ne
 
 export function parse(src, dims) {
   const toks = []
-  const re = /\s*(?:(\d+)|([A-Za-z]+)|(<<|>>|<=|>=|==|!=|.))/gy
+  const re = /\s*(?:(\d+)|((?:log2|[A-Za-z])+)|(<<|>>|<=|>=|==|!=|.))/giy
   let m
   while ((m = re.exec(src)) !== null) {
     if (m[1] !== undefined) toks.push({ k: 'num', s: m[1] })
@@ -108,7 +110,7 @@ export function parse(src, dims) {
       const [lo, hi] = FUNCTIONS[tk.s]
       if (args.length < lo || args.length > hi) throw new Error(`${tk.s}() takes ${lo === hi ? lo : `${lo} or more`} argument${lo === 1 && hi === 1 ? '' : 's'}`)
       if (tk.s === 'if' || args.length <= 2) return call(tk.s, ...args)
-      return args.reduce((l, r) => call(tk.s, l, r)) // min/max/gcd/concat fold left
+      return args.reduce((l, r) => call(tk.s, l, r)) // min/max/gcd/lcm/concat fold left
     }
     if (tk.s === '(') {
       p++

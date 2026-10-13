@@ -7,7 +7,7 @@ export const MAX_SYMBOLS = 9
 // precedence levels, matching the parser
 const ATOM = 9, POW = 8, MUL = 6, ADD = 5, SHIFT = 4, CMP = 3, AND = 2, XOR = 1, OR = 0
 
-export const countSymbols = (src) => (src.match(/\d+|[a-z]+|<<|>>|<=|>=|!=|[-+*/^<>=]/gi) || [])
+export const countSymbols = (src) => (src.match(/log2|\d+|[a-z]+|<<|>>|<=|>=|!=|[-+*/^<>=]/gi) || [])
   .reduce((n, t) => n + (/^[a-e]+$/i.test(t) ? t.length : 1), 0)
 
 export function randomConfig(maxStates, rnd = Math.random) {
@@ -44,7 +44,9 @@ export function randomConfig(maxStates, rnd = Math.random) {
     if (budget >= 6) kinds.push([2, 'if'])
     switch (weighted(kinds)) {
       case 'leaf': return leaf()
-      case 'fn1': return fn(pick(['digitsum', 'reverse', 'asc', 'desc']), gen(budget - 1))
+      case 'fn1': return rnd() < 0.3
+        ? fn(pick(['sigma', 'phi', 'spf']), variable()) // factoring functions only ever see a bare variable
+        : fn(pick(['digitsum', 'reverse', 'asc', 'desc', 'digitprod', 'isqrt', 'log2']), gen(budget - 1))
       case 'add': return infix('+', ADD, ...two(budget - 1))
       case 'sub': return infix('-', ADD, ...two(budget - 1))
       case 'mul': return infix('*', MUL, ...two(budget - 1))
@@ -54,7 +56,7 @@ export function randomConfig(maxStates, rnd = Math.random) {
       case 'mod': { const l = gen(budget - 2); return { s: `${wrap(l, MUL)} mod ${pick([2, 3, 5, 7, 9, 11, 16])}`, p: MUL, n: l.n + 2 } }
       case 'bit': { const [op, p] = pick([['xor', XOR], ['and', AND], ['or', OR]]); return infix(op, p, ...two(budget - 1)) }
       case 'shift': { const l = gen(budget - 2); return { s: `${wrap(l, SHIFT)} ${pick(['<<', '>>'])} ${int(1, 3)}`, p: SHIFT, n: l.n + 2 } }
-      case 'fn2': return fn(pick(['min', 'max', 'gcd']), ...two(budget - 1))
+      case 'fn2': return fn(pick(['min', 'max', 'gcd', 'lcm']), ...two(budget - 1))
       case 'absdiff': return fn('abs', infix('-', ADD, ...two(budget - 2)))
       case 'if': {
         const test = infix(pick(['<', '>', '=']), CMP, variable(), rnd() < 0.5 ? variable() : { s: String(int(1, 9)), p: ATOM, n: 1 })
