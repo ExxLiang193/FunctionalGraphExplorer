@@ -148,6 +148,8 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.code === 'KeyS' && e.altKey && !e.metaKey && !e.ctrlKey) { e.preventDefault(); saveRef.current() }
+      // F fits the graph to the screen, unless the key is being typed into a field
+      else if (e.code === 'KeyF' && !e.altKey && !e.metaKey && !e.ctrlKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { e.preventDefault(); canvasRef.current?.fit() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -400,7 +402,7 @@ export default function App() {
           {[
             ['−', 'Zoom out', () => canvasRef.current.zoom(1 / 1.5)],
             ['+', 'Zoom in', () => canvasRef.current.zoom(1.5)],
-            ['Fit', 'Fit to screen', () => canvasRef.current.fit()],
+            ['Fit', 'Fit to screen (F)', () => canvasRef.current.fit()],
           ].map(([t, label, fn]) => (
             <button key={t} onClick={fn} aria-label={label} title={label} className="min-w-9 border-l border-line px-3 py-2 text-ink-2 transition-colors first:border-l-0 hover:bg-white/10 hover:text-ink">
               {t}
