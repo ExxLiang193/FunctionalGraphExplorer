@@ -141,7 +141,9 @@ export default function App() {
       legend: legend.map((l) => ({ color: l.color, label: l.label ?? (l.len === 1 ? '1 (fixed point)' : l.len.toLocaleString()), count: l.count })),
     }
     const slug = drawn.formulas.join('_').replace(/\s+/g, '').replace(/[^A-Za-z0-9^+()=,_-]/g, '-').slice(0, 60)
-    saveImage(() => composeImage(canvasRef.current.snapshot(scale), scale, info), `graph_${slug}.png`).catch((e) => setError({ message: `Could not save image: ${e.message}`, formulaIndex: null }))
+    // short random suffix so two saves of the same formula never share a name
+    const uid = Math.random().toString(36).slice(2, 8).padEnd(6, '0')
+    saveImage(() => composeImage(canvasRef.current.snapshot(scale), scale, info), `graph_${slug}_${uid}.png`).catch((e) => setError({ message: `Could not save image: ${e.message}`, formulaIndex: null }))
   }
   useEffect(() => {
     const onKey = (e) => {
