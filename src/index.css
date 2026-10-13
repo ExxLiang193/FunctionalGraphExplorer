@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface: #1a1a19;
+  --color-panel: #232321;
+  --color-line: #3a3a37;
+  --color-ink: #ffffff;
+  --color-ink-2: #c3c2b7;
+  --color-ink-3: #8f8e85;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  color-scheme: dark;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
