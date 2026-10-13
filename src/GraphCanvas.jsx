@@ -48,12 +48,22 @@ export default function GraphCanvas({ graph, slots, ref }) {
     S.k = k
     schedule()
   }
-  useImperativeHandle(ref, () => ({ fit, zoom: (f) => zoomAt(S.w / 2, S.h / 2, f) }))
+  // Renders the current view (without hover highlight) into a fresh canvas at `scale` device pixels per CSS pixel.
+  function snapshot(scale) {
+    if (!S.graph || !S.w) return null
+    const cv = document.createElement('canvas')
+    cv.width = Math.round(S.w * scale); cv.height = Math.round(S.h * scale)
+    render(cv.getContext('2d'), scale, -1)
+    return cv
+  }
+  useImperativeHandle(ref, () => ({ fit, zoom: (f) => zoomAt(S.w / 2, S.h / 2, f), snapshot }))
 
   function draw() {
-    const cv = canvasRef.current, g = S.graph
-    if (!cv) return
-    const ctx = cv.getContext('2d'), { k, tx, ty, dpr } = S
+    const cv = canvasRef.current
+    if (cv) render(cv.getContext('2d'), S.dpr, S.hover)
+  }
+  function render(ctx, dpr, hover) {
+    const g = S.graph, { k, tx, ty } = S
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.fillStyle = SURFACE
     ctx.fillRect(0, 0, S.w, S.h)
@@ -163,13 +173,13 @@ export default function GraphCanvas({ graph, slots, ref }) {
     }
 
     // 5. hovered orbit: the path this state follows into (and once around) its cycle
-    if (S.hover >= 0) {
+    if (hover >= 0) {
       const seen = S.seen
       seen.fill(0)
       ctx.strokeStyle = '#ffffff'
       ctx.lineWidth = Math.max(2 * px, 1.4)
       ctx.beginPath()
-      for (let v = S.hover; v >= 0 && !seen[v]; v = succ[v]) {
+      for (let v = hover; v >= 0 && !seen[v]; v = succ[v]) {
         seen[v] = 1
         const a = edgeOff[v], b = edgeOff[v + 1]
         if (a === b) continue
@@ -177,7 +187,7 @@ export default function GraphCanvas({ graph, slots, ref }) {
         for (let i = a + 1; i < b; i++) ctx.lineTo(edgePts[2 * i], edgePts[2 * i + 1])
       }
       ctx.stroke()
-      const v = S.hover, r = Math.max((onRing[v] ? R_CYCLE : R_TREE) + 1.6, 5 * px)
+      const v = hover, r = Math.max((onRing[v] ? R_CYCLE : R_TREE) + 1.6, 5 * px)
       ctx.lineWidth = Math.max(2 * px, 0.9)
       ctx.beginPath()
       ctx.arc(x[v], y[v], r, 0, 6.2832)
