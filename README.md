@@ -1,5 +1,11 @@
 # Functional Graph Explorer
 
+![(a, b, c, d, e) → (b, c, d, e, a^3 − (a^3 >> 5)), ℤ⁵, 1 digit](examples/graph_b_c_d_e_a%5E3-%28a%5E3--5%29.jpg)
+
+![(a, b, c, d, e) → (b, c, d, e, a^4 − (a^3 >> 6)), ℤ⁵, 1 digit](examples/graph_b_c_d_e_a%5E4-%28a%5E3--6%29.jpg)
+
+![(a, b) → (b, a^2 + b), ℤ², 2 digits](examples/graph_b_a%5E2%2Bb.jpg)
+
 Visualizes the directed graph of an integer map `(a, b, …) → (A, B, …)` on a finite space: every state has one successor, so each component is a cycle with trees feeding into it.
 
 Enter formulas using the variables `a b c d e` and the operations below, choose the dimension (ℤ to ℤ⁵), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count. The dice button fills in a random space and random formulas (at most 9 symbols each, at most 1,000,000 states).
@@ -150,5 +156,7 @@ with `10^k` written out:
 npm install
 npm run dev
 ```
+
+More saved renders are in [`examples/`](examples).
 
 `npm test` runs the engine tests. Built with React, Vite and Tailwind.
