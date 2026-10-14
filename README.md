@@ -183,4 +183,4 @@ More saved renders are in [`examples/`](examples).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE); redistributions and derivative works must keep the NOTICE attribution.
