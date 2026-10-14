@@ -178,3 +178,7 @@ npm run dev
 More saved renders are in [`examples/`](examples).
 
 `npm test` runs the engine tests. Built with React, Vite and Tailwind.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
