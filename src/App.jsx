@@ -386,6 +386,16 @@ export default function App() {
         </div>
       )}
 
+      {/* credit */}
+      <a
+        href="https://github.com/ExxLiang193/FunctionalGraphExplorer"
+        target="_blank"
+        rel="noreferrer"
+        className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] text-ink-3/70 transition-colors hover:text-ink-2 max-md:hidden"
+      >
+        Functional Graph Explorer · by ExxLiang193
+      </a>
+
       {/* view controls */}
       <div className="absolute bottom-4 right-4 flex items-center gap-2 text-xs">
         {stats?.truncated && (

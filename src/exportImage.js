@@ -84,6 +84,10 @@ export function composeImage(graphCanvas, scale, info) {
   c.fillText('on cycle', pad, ry + 17 * u)
   c.textAlign = 'right'
   c.fillText('far from it', pad + rampW, ry + 17 * u)
+  // credit, bottom right; dropped only if the image is too narrow to fit it beside the ramp
+  c.font = `${11 * u}px ${SANS}`
+  const credit = 'Functional Graph Explorer · by ExxLiang193 · github.com/ExxLiang193/FunctionalGraphExplorer'
+  if (c.measureText(credit).width < inner - rampW - 24 * u) c.fillText(credit, W - pad, ry + 17 * u)
   return out
 }
 
