@@ -1,5 +1,7 @@
 # Functional Graph Explorer
 
+**Live app: https://exxliang193.github.io/FunctionalGraphExplorer/**
+
 ![(a, b, c, d, e) → (b, c, d, e, a^3 − (a^3 >> 5)), ℤ⁵, 1 digit](examples/graph_b_c_d_e_a%5E3-%28a%5E3--5%29.jpg)
 
 ![(a, b, c, d, e) → (b, c, d, e, a^4 − (a^3 >> 6)), ℤ⁵, 1 digit](examples/graph_b_c_d_e_a%5E4-%28a%5E3--6%29.jpg)
