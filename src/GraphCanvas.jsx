@@ -30,7 +30,7 @@ export default function GraphCanvas({ graph, slots, ref }) {
   const wrapRef = useRef(null)
   const canvasRef = useRef(null)
   const tipRef = useRef(null)
-  const S = useRef({ k: 1, tx: 0, ty: 0, w: 0, h: 0, dpr: 1, hover: -1, raf: 0, grid: null, graph: null, slots: null, compStart: null }).current
+  const S = useRef({ pinned: -1, k: 1, tx: 0, ty: 0, w: 0, h: 0, dpr: 1, hover: -1, raf: 0, grid: null, graph: null, slots: null, compStart: null }).current
   const [tip, setTip] = useState(null)
 
   const schedule = () => { if (!S.raf) S.raf = requestAnimationFrame(() => { S.raf = 0; draw() }) }
@@ -62,11 +62,48 @@ export default function GraphCanvas({ graph, slots, ref }) {
     render(cv.getContext('2d'), scale, -1)
     return cv
   }
-  useImperativeHandle(ref, () => ({ fit, zoom: (f) => zoomAt(S.w / 2, S.h / 2, f), snapshot }))
+  // Search: the node whose components equal `values` (K = dims * comps integers), or -1.
+  function find(values) {
+    const g = S.graph
+    if (!g) return -1
+    const K = g.dims * (g.comps || 1)
+    outer: for (let i = 0; i < g.m; i++) {
+      for (let k = 0; k < K; k++) if (g.coords[i * K + k] !== values[k]) continue outer
+      return i
+    }
+    return -1
+  }
+  // Pins the hover highlight on a node and brings it into view, zoomed in far enough to see its neighbours.
+  function focus(v) {
+    const g = S.graph
+    S.pinned = v
+    S.k = Math.max(S.k, Math.min(4, (S.fitK || 1) * 8))
+    S.tx = S.w / 2 - g.x[v] * S.k
+    S.ty = S.h / 2 - g.y[v] * S.k
+    if (S.hover < 0) setTip(describe(v))
+    schedule()
+  }
+  function clearFocus() {
+    S.pinned = -1
+    if (S.hover < 0) setTip(null)
+    schedule()
+  }
+  useImperativeHandle(ref, () => ({ fit, zoom: (f) => zoomAt(S.w / 2, S.h / 2, f), snapshot, find, focus, clearFocus }))
+
+  function placeTip(mx, my) {
+    const el = tipRef.current
+    if (!el) return
+    const flipX = mx > S.w - 280, flipY = my > S.h - 150
+    el.style.transform = `translate(${mx + (flipX ? -14 : 14)}px, ${my + (flipY ? -14 : 14)}px) translate(${flipX ? '-100%' : '0'}, ${flipY ? '-100%' : '0'})`
+  }
 
   function draw() {
     const cv = canvasRef.current
-    if (cv) render(cv.getContext('2d'), S.dpr, S.hover)
+    if (!cv) return
+    const shown = S.hover >= 0 ? S.hover : S.pinned
+    render(cv.getContext('2d'), S.dpr, shown)
+    // a pinned (searched) node keeps its tooltip attached as the view moves
+    if (S.hover < 0 && S.pinned >= 0 && S.graph) placeTip(S.graph.x[S.pinned] * S.k + S.tx, S.graph.y[S.pinned] * S.k + S.ty)
   }
   function render(ctx, dpr, hover) {
     const g = S.graph, { k, tx, ty } = S
@@ -245,6 +282,7 @@ export default function GraphCanvas({ graph, slots, ref }) {
   useEffect(() => {
     S.graph = graph
     S.hover = -1
+    S.pinned = -1
     setTip(null)
     if (graph) {
       const nc = graph.compR.length
@@ -280,12 +318,13 @@ export default function GraphCanvas({ graph, slots, ref }) {
     const ptrs = new Map()
     let pinch = 0, moved = false
     const setHover = (v, mx, my) => {
-      if (v !== S.hover) { S.hover = v; setTip(v >= 0 ? describe(v) : null); schedule() }
-      const el = tipRef.current
-      if (el && v >= 0) {
-        const flipX = mx > S.w - 280, flipY = my > S.h - 150
-        el.style.transform = `translate(${mx + (flipX ? -14 : 14)}px, ${my + (flipY ? -14 : 14)}px) translate(${flipX ? '-100%' : '0'}, ${flipY ? '-100%' : '0'})`
+      if (v !== S.hover) {
+        S.hover = v
+        // leaving a node falls back to the searched (pinned) one, if any
+        setTip(v >= 0 ? describe(v) : S.pinned >= 0 ? describe(S.pinned) : null)
+        schedule()
       }
+      if (v >= 0) placeTip(mx, my)
     }
     const onDown = (e) => {
       cv.setPointerCapture(e.pointerId)

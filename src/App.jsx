@@ -464,7 +464,9 @@ export default function App() {
       </a>
 
       {/* view controls */}
-      <div className="absolute bottom-4 right-4 flex items-center gap-2 text-xs">
+      <div className="absolute bottom-4 right-4 flex flex-col items-end gap-2 text-xs">
+        {result && <StateSearch params={result.params} canvasRef={canvasRef} />}
+        <div className="flex items-center gap-2">
         {stats?.truncated && (
           <button onClick={() => setNonce((n) => n + 1)} className={`px-3 py-2 text-ink-2 transition-colors hover:text-ink ${panel}`} title="Start from a different random state">
             Resample
@@ -486,7 +488,70 @@ export default function App() {
             </button>
           ))}
         </div>
+        </div>
       </div>
     </div>
+  )
+}
+
+/** Bottom-right search: type a state's components and the graph highlights it like a hover. */
+function StateSearch({ params, canvasRef }) {
+  const field = FIELD[params.field ?? 'int'], C = field.C, dims = params.dims
+  const names = VAR_NAMES.slice(0, dims)
+  const [vals, setVals] = useState(() => Array(dims * C).fill(''))
+  const [msg, setMsg] = useState(null)
+  const [found, setFound] = useState(false)
+  // a new configuration resets the search
+  useEffect(() => { setVals(Array(dims * C).fill('')); setMsg(null); setFound(false) }, [params, dims, C])
+
+  const clear = () => { setVals(Array(dims * C).fill('')); setMsg(null); setFound(false); canvasRef.current?.clearFocus() }
+  const MISS = 'Not in sample. Try different values.'
+  const search = (e) => {
+    e.preventDefault()
+    const nums = vals.map((v) => (/^-?\d+$/.test(v.trim()) ? Number(v.trim()) : NaN))
+    const v = nums.some(Number.isNaN) ? -1 : canvasRef.current?.find(nums) ?? -1
+    if (v < 0) { setFound(false); canvasRef.current?.clearFocus(); return setMsg(MISS) }
+    setMsg(null); setFound(true)
+    canvasRef.current.focus(v)
+  }
+  const box = (k) => (
+    <input
+      key={k}
+      value={vals[k]}
+      onChange={(e) => setVals((a) => a.map((x, i) => (i === k ? e.target.value.replace(/[^0-9-]/g, '') : x)))}
+      inputMode="numeric"
+      aria-label={`${names[Math.floor(k / C)]}${C > 1 ? ` component ${k % C + 1}` : ''}`}
+      className="w-11 select-text rounded border border-line bg-surface px-1.5 py-1 text-center font-mono text-[11px] text-ink outline-none focus:border-[#3987e5]"
+    />
+  )
+  const unit = ['', 'i', 'j', 'k']
+  return (
+    <form onSubmit={search} className={`flex max-w-[calc(100vw-2rem)] flex-col items-end gap-1.5 px-2.5 py-2 ${panel}`}>
+      <div className="flex flex-wrap items-center justify-end gap-1 font-mono text-[11px] text-ink-3">
+        <span className="mr-1 font-sans text-ink-2">Find</span>(
+        {names.map((nm, j) => (
+          <span key={nm} className="flex items-center gap-1">
+            {Array.from({ length: C }, (_, c) => (
+              <span key={c} className="flex items-center gap-0.5">
+                {c > 0 && <span>+</span>}
+                {box(j * C + c)}
+                {unit[c] && <span>{unit[c]}</span>}
+              </span>
+            ))}
+            {j < dims - 1 && <span>,</span>}
+          </span>
+        ))}
+        )
+        <button type="submit" aria-label="Find state" title="Find and highlight this state (Enter)" className="ml-1 rounded px-1.5 py-1 text-ink-2 transition-colors hover:bg-white/10 hover:text-ink">
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" strokeLinecap="round" /></svg>
+        </button>
+        {(found || msg || vals.some((v) => v !== '')) && (
+          <button type="button" onClick={clear} aria-label="Clear search" title="Clear search" className="rounded px-1.5 py-1 text-ink-3 transition-colors hover:bg-white/10 hover:text-ink">
+            ×
+          </button>
+        )}
+      </div>
+      {msg && <div className="max-w-72 text-right text-[11px] text-[#e66767]">{msg}</div>}
+    </form>
   )
 }
