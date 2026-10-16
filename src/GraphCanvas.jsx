@@ -5,6 +5,12 @@ import { VAR_NAMES } from './engine/parser.js'
 const R_CYCLE = 3.4, R_TREE = 2.3, R_LEAF = 1.7
 const ARROW_ZOOM = 2.4 // px per world unit at which arrowheads appear
 const fmt = (n) => String(n).replace('-', '−')
+// one variable's components as an integer, x+yi, or w+xi+yj+zk (zero terms dropped)
+const fmtValue = (c) => {
+  if (c.length === 1) return fmt(c[0])
+  const terms = c.map((v, k) => [v, ['', 'i', 'j', 'k'][k]]).filter(([v], k) => v !== 0 || (k === 0 && c.every((u) => u === 0)))
+  return terms.map(([v, u], k) => `${v < 0 ? '−' : k ? '+' : ''}${Math.abs(v) === 1 && u ? '' : Math.abs(v)}${u}`).join('')
+}
 
 // Uniform grid over node positions in CSR form, for O(1) hover lookups.
 function buildGrid(g) {
@@ -217,8 +223,8 @@ export default function GraphCanvas({ graph, slots, ref }) {
   }
 
   function describe(v) {
-    const g = S.graph, n = g.dims
-    const tuple = (i) => `(${Array.from(g.coords.subarray(i * n, i * n + n), fmt).join(', ')})`
+    const g = S.graph, C = g.comps || 1, n = g.dims * C
+    const tuple = (i) => `(${Array.from({ length: g.dims }, (_, j) => fmtValue(Array.from(g.coords.subarray(i * n + j * C, i * n + j * C + C)))).join(', ')})`
     const c = g.comp[v], p = g.succ[v], d = g.depth[v], len = g.compRing[c]
     const closed = g.compClosed[c] === 1
     return {

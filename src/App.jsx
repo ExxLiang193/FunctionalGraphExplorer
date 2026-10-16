@@ -14,6 +14,24 @@ const DEFAULTS = {
   4: ['b', 'c', 'd', 'a*b + c*d'],
   5: ['b', 'c', 'd', 'e', 'a*b + c*d + e'],
 }
+// number systems: C integer components per variable, and how many variables fit under the state limit
+const FIELDS = [
+  { value: 'int', label: 'ℤ', C: 1, maxDims: 5, maxDigits: 5, title: 'Integers' },
+  { value: 'complex', label: 'ℂ', C: 2, maxDims: 2, maxDigits: 2, title: 'Complex numbers: each variable is x + yi' },
+  { value: 'quat', label: 'ℍ', C: 4, maxDims: 1, maxDigits: 1, title: 'Quaternions: one variable w + xi + yj + zk' },
+]
+const FIELD = Object.fromEntries(FIELDS.map((f) => [f.value, f]))
+const FIELD_SYNTAX = {
+  complex: ['+ − * ^n', 'i', 'conj re im norm'],
+  quat: ['+ − * ^n', 'i j k', 'conj re im norm', 'a*b ≠ b*a'],
+}
+const NO_MODS = ['', '', '', '', '']
+// "mod 100" when every variable shares a modulus, otherwise "mod (100, 99)"
+const modText = (cfg) => {
+  const base = cfg.modulus ?? 10 ** cfg.digits
+  const pv = Array.from({ length: cfg.dims }, (_, j) => cfg.moduli?.[j] ?? base)
+  return pv.every((p) => p === pv[0]) ? `mod ${pv[0].toLocaleString()}` : `mod (${pv.map((p) => p.toLocaleString()).join(', ')})`
+}
 const SYNTAX = [
   '+ − * / ^ mod',
   '< <= > >= = !=',
@@ -61,13 +79,15 @@ export default function App() {
   const [dims, setDims] = useState(2)
   const [digits, setDigits] = useState(2)
   const [modulus, setModulus] = useState('') // custom modulus as typed; empty = use 10^digits
+  const [perMod, setPerMod] = useState(NO_MODS) // per-variable overrides as typed; empty = the modulus above
+  const [field, setField] = useState('int')
   const [negative, setNegative] = useState(false)
   const [byDims, setByDims] = useState(DEFAULTS)
   const [nonce, setNonce] = useState(0)
   const [collapsed, setCollapsed] = useState(false)
   // The graph only recomputes from `applied`, which changes on Submit (or Enter in a formula).
   const [limit, setLimit] = useState(10000)
-  const [applied, setApplied] = useState({ dims: 2, digits: 2, modulus: null, negative: false, limit: 10000, formulas: DEFAULTS[2] })
+  const [applied, setApplied] = useState({ dims: 2, digits: 2, modulus: null, moduli: [null, null], field: 'int', negative: false, limit: 10000, formulas: DEFAULTS[2] })
   const [result, setResult] = useState(null) // { graph, stats }
   const [error, setError] = useState(null)
   const [progress, setProgress] = useState(null)
@@ -132,8 +152,8 @@ export default function App() {
       parts: drawn.formulas,
       tail: ')',
       meta: [
-        `ℤ${SUP[drawn.dims]}`,
-        drawn.modulus ? `mod ${drawn.modulus.toLocaleString()}` : `${drawn.digits} digit${drawn.digits > 1 ? 's' : ''}`,
+        `${FIELD[drawn.field ?? 'int'].label}${SUP[drawn.dims]}`,
+        drawn.modulus || drawn.moduli?.some((x) => x) ? modText(drawn) : `${drawn.digits} digit${drawn.digits > 1 ? 's' : ''}`,
         drawn.negative ? 'negatives allowed' : 'non-negative',
         `${formatCount(drawn.stats.totalStates)} states${drawn.stats.truncated ? `, ${drawn.stats.shown.toLocaleString()} shown` : ''}`,
         ...(drawn.stats.cycles != null ? [`${drawn.stats.cycles.toLocaleString()} cycle${drawn.stats.cycles === 1 ? '' : 's'}`] : []),
@@ -158,24 +178,47 @@ export default function App() {
   const mod = modulus.trim() === '' ? null : Number(modulus)
   const modBad = mod !== null && !(Number.isInteger(mod) && mod >= 2 && mod <= MAX_STATES)
   const P = mod !== null && !modBad ? mod : 10 ** digits
-  const known = findExample({ dims, digits, modulus: modBad ? null : mod, negative, formulas })
-  const dirty = dims !== applied.dims || (mod === null && digits !== applied.digits) || mod !== applied.modulus || negative !== applied.negative || limit !== applied.limit || formulas.some((f, i) => f !== applied.formulas[i])
-  const stateCount = BigInt(negative ? 2 * P - 1 : P) ** BigInt(dims)
+  // per-variable moduli: an override where one is typed and valid, otherwise the shared P
+  const perParsed = perMod.slice(0, dims).map((t) => (t.trim() === '' ? null : Number(t)))
+  const perBad = perParsed.map((v) => v !== null && !(Number.isInteger(v) && v >= 2 && v <= MAX_STATES))
+  const moduli = perParsed.map((v, j) => (v !== null && !perBad[j] ? v : null))
+  const Pv = moduli.map((v) => v ?? P)
+  const anyBad = modBad || perBad.some(Boolean)
+  const C = FIELD[field].C
+  const known = findExample({ dims, digits, modulus: modBad ? null : mod, moduli, field, negative, formulas })
+  const dirty = dims !== applied.dims || (mod === null && digits !== applied.digits) || mod !== applied.modulus || field !== applied.field ||
+    moduli.some((v, j) => v !== (applied.moduli?.[j] ?? null)) || negative !== applied.negative || limit !== applied.limit || formulas.some((f, i) => f !== applied.formulas[i])
+  const stateCount = Pv.reduce((n, p) => n * BigInt(negative ? 2 * p - 1 : p) ** BigInt(C), 1n)
   const tooBig = stateCount > BigInt(MAX_STATES)
-  const submit = (e) => { e.preventDefault(); if (dirty && !tooBig && !modBad) { setError(null); setApplied({ dims, digits, modulus: mod, negative, limit, formulas }) } }
+  const submit = (e) => { e.preventDefault(); if (dirty && !tooBig && !anyBad) { setError(null); setApplied({ dims, digits, modulus: mod, moduli, field, negative, limit, formulas }) } }
+  const changeField = (f) => { setField(f); setDims((d) => Math.min(d, FIELD[f].maxDims)); setDigits((d) => Math.min(d, FIELD[f].maxDigits)) }
   const randomize = () => {
-    const r = randomConfig(MAX_STATES)
-    setDims(r.dims); setDigits(r.digits); setModulus(''); setNegative(r.negative)
+    const r = randomConfig(MAX_STATES, Math.random, field) // stays in the current number system
+    setDims(r.dims); setDigits(r.digits); setModulus(r.modulus ? String(r.modulus) : ''); setPerMod(NO_MODS); setNegative(r.negative)
     setByDims((m) => ({ ...m, [r.dims]: r.formulas }))
   }
   const loadExample = (ex) => {
-    setDims(ex.dims); setDigits(ex.digits); setModulus(ex.modulus ? String(ex.modulus) : '')
+    setField(ex.field ?? 'int'); setDims(ex.dims); setDigits(ex.digits); setModulus(ex.modulus ? String(ex.modulus) : '')
+    setPerMod(NO_MODS.map((_, j) => (ex.moduli?.[j] ? String(ex.moduli[j]) : '')))
     setNegative(!!ex.negative); setLimit(ex.limit ?? 10000)
     setByDims((m) => ({ ...m, [ex.dims]: ex.f }))
   }
+  // Typing in one variable's mod box switches to per-variable moduli: the other boxes are filled with
+  // the modulus they were inheriting, and the shared Digits / modulus setting is cleared. Picking Digits
+  // or typing a shared modulus switches back and empties every per-variable box.
+  const perMode = perMod.slice(0, dims).some((t) => t.trim() !== '')
+  const setVarModulus = (i, raw) => {
+    const v = raw.replace(/[^0-9]/g, '')
+    setPerMod((m) => m.map((x, j) => (j === i ? v : !perMode && j < dims ? String(P) : x)))
+    if (!perMode) setModulus('')
+  }
   const setFormula = (i, v) => setByDims((m) => ({ ...m, [dims]: m[dims].map((f, j) => (j === i ? v : f)) }))
   const stats = result?.stats
-  const range = negative ? `[−${P - 1}, ${P - 1}]` : `[0, ${P - 1}]`
+  const rangeOf = (p) => (negative ? `[−${p - 1}, ${p - 1}]` : `[0, ${p - 1}]`)
+  const subject = C > 1 ? `each component of ${vars.join(', ')}` : vars.join(', ')
+  const rangeHint = Pv.every((p) => p === Pv[0])
+    ? `${subject} ∈ ${rangeOf(Pv[0])} · ${negative ? `results keep their sign; the size wraps mod ${Pv[0].toLocaleString()}` : `results wrap mod ${Pv[0].toLocaleString()}`}`
+    : `${vars.map((v, j) => `${v} ∈ ${rangeOf(Pv[j])}`).join(' · ')} · each result wraps at its own variable's modulus`
 
   let rows = [], note = null
   if (stats) {
@@ -218,7 +261,7 @@ export default function App() {
           <span className="text-ink-3">▸</span>
           <span className="truncate">
             ({VAR_NAMES.slice(0, applied.dims).join(', ')}) → ({applied.formulas.join(', ')})
-            <span className="text-ink-3"> mod {(applied.modulus ?? 10 ** applied.digits).toLocaleString()}{applied.negative ? ' ±' : ''}</span>
+            <span className="text-ink-3"> {modText(applied)}{applied.negative ? ' ±' : ''}{applied.field && applied.field !== 'int' ? ` · ${FIELD[applied.field].label}` : ''}</span>
           </span>
           {error && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#e66767]" />}
         </button>
@@ -253,6 +296,18 @@ export default function App() {
                   !dirty && error?.formulaIndex === i ? 'border-[#e66767]' : 'border-line'
                 }`}
               />
+              <span className="text-[11px] text-ink-3">mod</span>
+              <input
+                value={perMod[i]}
+                onChange={(e) => setVarModulus(i, e.target.value)}
+                inputMode="numeric"
+                placeholder={P.toLocaleString()}
+                aria-label={`Modulus for ${vars[i]}`}
+                aria-invalid={perBad[i]}
+                title={`Modulus for ${vars[i]} only; leave empty to use the shared one`}
+                style={{ width: `${Math.max(4, (perMod[i] || P.toLocaleString()).length + 2)}ch` }}
+                className={`select-text rounded-md border bg-surface px-1.5 py-1.5 text-[12px] text-ink outline-none transition-colors placeholder:text-ink-3/70 focus:border-[#3987e5] ${perBad[i] ? 'border-[#e66767]' : 'border-line/60'}`}
+              />
               {i < formulas.length - 1 && <span className="text-ink-3">,</span>}
             </span>
           ))}
@@ -267,22 +322,32 @@ export default function App() {
         )}
         {error && <div className="mt-2 text-xs text-[#e66767]">{error.message}</div>}
 
-        <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2.5 text-xs text-ink-2">
+        {/* space */}
+        <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-2">
           <label className="flex items-center gap-2">
             Space
-            <Segmented label="Dimensions" value={dims} onChange={setDims} options={[1, 2, 3, 4, 5].map((d) => ({ value: d, label: `ℤ${SUP[d]}` }))} />
+            <Segmented label="Number system" value={field} onChange={changeField} options={FIELDS.map((f) => ({ value: f.value, label: f.label }))} />
+            <Segmented
+              label="Dimensions"
+              value={dims}
+              onChange={setDims}
+              options={Array.from({ length: FIELD[field].maxDims }, (_, i) => ({ value: i + 1, label: `${FIELD[field].label}${SUP[i + 1]}` }))}
+            />
           </label>
+        </div>
+        {/* range of values */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-2">
           <label className="flex items-center gap-2">
             Digits
-            <Segmented label="Digits" value={mod === null ? digits : null} onChange={(d) => { setDigits(d); setModulus('') }} options={[1, 2, 3, 4, 5].map((d) => ({ value: d, label: d }))} />
+            <Segmented label="Digits" value={mod === null && !perMode ? digits : null} onChange={(d) => { setDigits(d); setModulus(''); setPerMod(NO_MODS) }} options={Array.from({ length: FIELD[field].maxDigits }, (_, i) => ({ value: i + 1, label: i + 1 }))} />
           </label>
           <label className="flex items-center gap-2" title="Wrap at any modulus instead of a power of ten, e.g. a prime like 997 or a power of two like 4096">
             or modulus
             <input
               value={modulus}
-              onChange={(e) => setModulus(e.target.value.replace(/[^0-9]/g, ''))}
+              onChange={(e) => { setModulus(e.target.value.replace(/[^0-9]/g, '')); setPerMod(NO_MODS) }}
               inputMode="numeric"
-              placeholder={(10 ** digits).toLocaleString()}
+              placeholder={perMode ? '' : (10 ** digits).toLocaleString()}
               aria-label="Custom modulus"
               aria-invalid={modBad}
               className={`w-20 select-text rounded-md border bg-surface px-2 py-1 font-mono text-xs text-ink outline-none placeholder:text-ink-3 focus:border-[#3987e5] ${modBad ? 'border-[#e66767]' : 'border-line'}`}
@@ -292,26 +357,28 @@ export default function App() {
             <input type="checkbox" checked={negative} onChange={(e) => setNegative(e.target.checked)} className="h-3.5 w-3.5 accent-[#3987e5]" />
             Allow negative
           </label>
+        </div>
+        {/* what the range means */}
+        <div className="mt-2 text-[11px] text-ink-3">
+          {rangeHint}
+        </div>
+        {/* view */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-2">
           <label className="flex items-center gap-2" title="Largest number of states drawn; bigger spaces are sampled">
             Sample limit
             <Segmented label="Sample state limit" value={limit} onChange={setLimit} options={[10000, 50000, 100000].map((n) => ({ value: n, label: `${n / 1000}k` }))} />
           </label>
         </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-ink-3">
-          <span>
-            {vars.join(', ')} ∈ {range} · {negative ? `results keep their sign; the size wraps mod ${P.toLocaleString()}` : `results wrap mod ${P.toLocaleString()}`}
-          </span>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-1.5 font-mono text-[11px] text-ink-3">
-          {SYNTAX.map((t) => (
+        {/* available syntax */}
+        <div className="mt-3 flex flex-wrap gap-1.5 font-mono text-[11px] text-ink-3">
+          {(FIELD_SYNTAX[field] ?? SYNTAX).map((t) => (
             <span key={t} className="rounded bg-white/5 px-1.5 py-0.5">{t}</span>
           ))}
         </div>
         <div className="mt-3.5 flex items-center gap-3">
           <button
             type="submit"
-            disabled={!dirty || tooBig || modBad}
+            disabled={!dirty || tooBig || anyBad}
             className="rounded-md bg-[#3987e5] px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#4f96ea] disabled:cursor-default disabled:bg-white/10 disabled:text-ink-3"
           >
             Submit
@@ -320,7 +387,7 @@ export default function App() {
             type="button"
             onClick={randomize}
             aria-label="Randomize"
-            title="Randomize: fill in a random space and random formulas"
+            title="Randomize: fill in a random space and random formulas (in the current number system)"
             className="flex h-7 w-7 items-center justify-center rounded-md border border-line text-ink-2 transition-colors hover:border-ink-3 hover:text-ink"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -331,8 +398,8 @@ export default function App() {
             </svg>
           </button>
           <ExamplesMenu onPick={loadExample} />
-          {modBad ? (
-            <span className="text-[11px] text-[#e66767]">Modulus must be a whole number from 2 to {MAX_STATES.toLocaleString()}.</span>
+          {anyBad ? (
+            <span className="text-[11px] text-[#e66767]">Moduli must be whole numbers from 2 to {MAX_STATES.toLocaleString()}.</span>
           ) : tooBig ? (
             <span className="text-[11px] text-[#e66767]">
               {formatCount(stateCount)} states is over the {MAX_STATES.toLocaleString()} limit. Lower the digits, modulus or dimension.

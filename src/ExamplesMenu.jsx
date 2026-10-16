@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { EXAMPLES } from './examples.js'
 
 const SUP = ['', '', '²', '³', '⁴', '⁵']
+const SYM = { int: 'ℤ', complex: 'ℂ', quat: 'ℍ' }
+const ORDER = ['int', 'complex', 'quat']
 const tags = (ex) => [
-  ex.modulus ? `mod ${ex.modulus.toLocaleString()}` : `${ex.digits} digit${ex.digits > 1 ? 's' : ''}`,
+  ex.moduli ? `mod ${ex.moduli.join(', ')}` : ex.modulus ? `mod ${ex.modulus.toLocaleString()}` : `${ex.digits} digit${ex.digits > 1 ? 's' : ''}`,
   ...(ex.negative ? ['negatives'] : []),
   ...(ex.limit ? [`${ex.limit / 1000}k`] : []),
 ].join(' · ')
@@ -15,8 +17,10 @@ export default function ExamplesMenu({ onPick }) {
   const root = useRef(null)
   const groups = useMemo(() => {
     const m = new Map()
-    for (const ex of EXAMPLES) m.set(ex.dims, [...(m.get(ex.dims) || []), ex])
-    return [...m].sort((a, b) => a[0] - b[0])
+    // group key: number system and dimension, e.g. 'complex:2'
+    for (const ex of EXAMPLES) { const k = `${ex.field ?? 'int'}:${ex.dims}`; m.set(k, [...(m.get(k) || []), ex]) }
+    const rank = (k) => { const [f, d] = k.split(':'); return ORDER.indexOf(f) * 10 + Number(d) }
+    return [...m].sort((a, b) => rank(a[0]) - rank(b[0]))
   }, [])
 
   useEffect(() => {
@@ -52,7 +56,7 @@ export default function ExamplesMenu({ onPick }) {
                 onClick={() => setSpace(dims)}
                 className={`${item} ${space === dims ? 'bg-white/10 text-ink' : 'text-ink-2'}`}
               >
-                <span className="font-mono text-[13px]">ℤ{SUP[dims]}</span>
+                <span className="font-mono text-[13px]">{SYM[dims.split(':')[0]]}{SUP[dims.split(':')[1]]}</span>
                 <span className="text-ink-3">{list.length} ▸</span>
               </button>
               {space === dims && (
