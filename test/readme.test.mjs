@@ -8,7 +8,7 @@ import { EXAMPLES, findExample } from '../src/examples.js'
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
 // numbered example rows: | # | Name | Space | Digits | Negative | [Limit |] Formulas | Note |
 const rows = readme.split('\n').filter((l) => /^\| \d+ \|/.test(l) && l.split('|').length >= 9)
-assert.equal(rows.length, 76)
+assert.equal(rows.length, 86)
 const fromReadme = []
 for (const row of rows) {
   const cells = row.split('|').map((s) => s.trim())
@@ -16,16 +16,18 @@ for (const row of rows) {
   const limit = cells.length === 10 ? Number(cells[6].replace('k', '000')) : 10000
   const formulas = cells[cells.length - 3]
   const f = [...formulas.matchAll(/`([^`]+)`/g)].map((m) => m[1])
-  const dims = { 'ℤ': 1, 'ℤ²': 2, 'ℤ³': 3, 'ℤ⁴': 4, 'ℤ⁵': 5 }[space]
+  const [field, dims] = { 'ℤ': ['int', 1], 'ℤ²': ['int', 2], 'ℤ³': ['int', 3], 'ℤ⁴': ['int', 4], 'ℤ⁵': ['int', 5], 'ℂ': ['complex', 1], 'ℂ²': ['complex', 2], 'ℍ': ['quat', 1] }[space]
   assert.equal(f.length, dims, `#${num} ${name}: formula count`)
-  const modulus = digits.startsWith('mod ') ? Number(digits.slice(4)) : undefined
-  const g = build({ dims, digits: modulus ? String(modulus - 1).length : Number(digits), modulus, negative: negative === 'on', formulas: f, limit })
+  const mods = digits.startsWith('mod ') ? digits.slice(4).split(',').map(Number) : null
+  const modulus = mods?.length === 1 ? mods[0] : undefined, moduli = mods?.length > 1 ? mods : undefined
+  const dig = mods ? String(mods[0] - 1).length : Number(digits)
+  const g = build({ dims, digits: dig, modulus, moduli, field, negative: negative === 'on', formulas: f, limit })
   layout(g.m, g.succ)
-  fromReadme.push({ name, dims, digits: modulus ? String(modulus - 1).length : Number(digits), modulus, negative: negative === 'on', limit, f })
+  fromReadme.push({ name, field, dims, digits: dig, modulus, moduli, negative: negative === 'on', limit, f })
   if (process.env.VERBOSE) console.log(num, name, JSON.stringify(g.stats.census?.slice(0, 10)), 'leaves', g.stats.leaves, 'of', g.stats.totalStates, 'shown', g.m, 'cycles', g.stats.cycles, 'longest', g.stats.longest)
 }
 // The in-app Examples menu must offer exactly the README's configurations (plus the unnumbered 2-digit digit-append one).
-const norm = (e) => ({ name: e.name, dims: e.dims, digits: e.digits, modulus: e.modulus, negative: !!e.negative, limit: e.limit ?? 10000, f: e.f })
+const norm = (e) => ({ name: e.name, field: e.field ?? 'int', dims: e.dims, digits: e.digits, modulus: e.modulus, moduli: e.moduli, negative: !!e.negative, limit: e.limit ?? 10000, f: e.f })
 const extra = 'Digit append, 2-digit blocks'
 assert.deepEqual(EXAMPLES.filter((e) => e.name !== extra).map(norm), fromReadme)
 const two = EXAMPLES.find((e) => e.name === extra)

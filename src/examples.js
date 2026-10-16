@@ -1,17 +1,18 @@
 // Every example configuration from the README, in README order (test/readme.test.mjs keeps the two in sync).
-// Omitted fields default to: no custom modulus, negative off, sample limit 10,000.
+// Omitted fields default to: integers, no custom modulus, no per-variable moduli, negative off, sample limit 10,000.
 const key = (f) => f.join('|').replace(/\s+/g, '').toLowerCase()
 
 /**
  * The example whose formulas equal `formulas` (ignoring spaces and case), or null.
  * `exact` says whether its digits/modulus and negative setting match too; an exact match wins.
  */
-export function findExample({ dims, digits, modulus, negative, formulas }) {
+export function findExample({ dims, digits, modulus, moduli, field = 'int', negative, formulas }) {
   const k = key(formulas)
   let loose = null
   for (const ex of EXAMPLES) {
-    if (ex.dims !== dims || key(ex.f) !== k) continue
-    const same = !!ex.negative === negative && (ex.modulus ?? null) === modulus && (modulus !== null || ex.digits === digits)
+    if (ex.dims !== dims || (ex.field ?? 'int') !== field || key(ex.f) !== k) continue
+    const sameMods = Array.from({ length: dims }, (_, j) => (ex.moduli?.[j] ?? null) === (moduli?.[j] ?? null)).every(Boolean)
+    const same = sameMods && !!ex.negative === negative && (ex.modulus ?? null) === modulus && (modulus !== null || ex.digits === digits)
     if (same) return { example: ex, exact: true }
     loose ??= ex
   }
@@ -96,4 +97,14 @@ export const EXAMPLES = [
   { name: "12-bit xorshift", dims: 1, digits: 4, modulus: 4096, f: ['a xor (a << 3) xor (a >> 2)'] },
   { name: "Fibonacci over a prime field", dims: 2, digits: 2, modulus: 97, f: ['b', 'a + b'] },
   { name: "lcm and gcd", dims: 2, digits: 2, f: ['lcm(a, b)', 'gcd(a, b)'] },
+  { name: "Complex squaring", field: 'complex', dims: 1, digits: 2, modulus: 31, f: ['a^2'] },
+  { name: "Julia-style", field: 'complex', dims: 1, digits: 2, modulus: 31, f: ['a^2 + i'] },
+  { name: "Gaussian Fibonacci", field: 'complex', dims: 2, digits: 1, f: ['b', 'a + i*b'] },
+  { name: "Complex Hénon", field: 'complex', dims: 2, digits: 1, f: ['b + 1 - a^2', 'a'] },
+  { name: "Quaternion square", field: 'quat', dims: 1, digits: 1, f: ['a^2 + j'] },
+  { name: "Quaternion sandwich", field: 'quat', dims: 1, digits: 1, f: ['i*a*j'] },
+  { name: "Commutator", field: 'quat', dims: 1, digits: 1, f: ['a*i - i*a'] },
+  { name: "Quaternion cube", field: 'quat', dims: 1, digits: 1, modulus: 7, f: ['a^3 + 1'] },
+  { name: "Mixed-moduli Fibonacci", dims: 2, digits: 2, moduli: [100, 99], f: ['b', 'a + b'] },
+  { name: "Mixed-moduli quadratic", dims: 2, digits: 2, moduli: [64, 81], f: ['b', 'a^2 + b'] },
 ]

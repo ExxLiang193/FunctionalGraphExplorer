@@ -10,7 +10,9 @@
 
 Visualizes the directed graph of an integer map `(a, b, …) → (A, B, …)` on a finite space: every state has one successor, so each component is a cycle with trees feeding into it.
 
-Enter formulas using the variables `a b c d e` and the operations below, choose the dimension (ℤ to ℤ⁵), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count, or to any modulus you type in the "or modulus" box (a prime such as 997, a power of two such as 4096, …). The Examples menu next to Submit loads any configuration listed below. The dice button fills in a random space and random formulas (at most 9 symbols each, at most 1,000,000 states).
+Enter formulas using the variables `a b c d e` and the operations below, choose the dimension (ℤ to ℤ⁵), the number of digits, and whether negatives are allowed, then press **Submit**. Results wrap to the chosen digit count, or to any modulus you type in the "or modulus" box (a prime such as 997, a power of two such as 4096, …). The small `mod` box after each formula gives that variable its own modulus.
+
+The ℤ / ℂ / ℍ switch picks the number system. In ℂ each variable is a complex number x + yi (up to two variables); in ℍ there is one quaternion w + xi + yj + zk. Every component wraps at the variable's modulus, so useful moduli there are small (2 to 31). The Examples menu next to Submit loads any configuration listed below. The dice button fills in a random space and random formulas (at most 9 symbols each, at most 1,000,000 states).
 
 ## Operations
 
@@ -23,6 +25,7 @@ Enter formulas using the variables `a b c d e` and the operations below, choose 
 | Number theory | `sigma(x)` (sum of divisors), `phi(x)` (Euler's totient), `spf(x)` (smallest prime factor), `isprime(x)` |
 | Bitwise | `and`, `or`, `xor`, `<<`, `>>` |
 
+| Complex and quaternion modes | `+ - *`, whole-number powers `^n`, the units `i` (ℂ) or `i j k` (ℍ), `conj(x)`, `re(x)`, `im(x)`, `norm(x)`. Quaternion multiplication is not commutative: `i*a` and `a*i` differ. |
 Examples: Collatz `if(a mod 2 = 0, a/2, 3a + 1)`, Kaprekar `desc(a) - asc(a)`, the digit-append Fibonacci `(if(a+b < 10, b, 1), (a+b) mod 10)`.
 
 Press **⌥S** (Option+S, or the Save button) to save the current view as a PNG, with the formula above the graph and the legend below it.
@@ -151,6 +154,23 @@ A Digits entry of `mod N` means: type N into the "or modulus" box.
 | 74 | 12-bit xorshift | ℤ | mod 4096 | off | `a xor (a << 3) xor (a >> 2)` | With a power-of-two modulus the shifts wrap as they do in hardware; half the states are unreachable. |
 | 75 | Fibonacci over a prime field | ℤ² | mod 97 | off | `b`, `a + b` | Only rings: 48 of length 196 around the fixed origin. |
 | 76 | lcm and gcd | ℤ² | 2 | off | `lcm(a, b)`, `gcd(a, b)` | Collapses onto 573 fixed points. |
+
+### Complex numbers, quaternions and mixed moduli
+
+ℂ and ℍ are the number-system switch next to Space. A Digits entry of `mod 100, 99` means one modulus per variable: type them into the small `mod` box after each formula.
+
+| # | Name | Space | Digits | Negative | Formulas | What to look for |
+|---|---|---|---|---|---|---|
+| 77 | Complex squaring | ℂ | mod 31 | off | `a^2` | Squaring in the Gaussian integers mod 31. Since 31 leaves remainder 3 when divided by 4, this is a field of 961 elements, and half the states are unreachable. |
+| 78 | Julia-style | ℂ | mod 31 | off | `a^2 + i` | z² + i: just two cycles, of length 2 and 19. |
+| 79 | Gaussian Fibonacci | ℂ² | 1 | off | `b`, `a + i*b` | Reversible: 832 rings of length 12. |
+| 80 | Complex Hénon | ℂ² | 1 | off | `b + 1 - a^2`, `a` | Reversible like its integer version (example 9): 700 rings, the longest 18. |
+| 81 | Quaternion square | ℍ | 1 | off | `a^2 + j` | q² + j: 12 cycles, and 9,554 of the 10,000 states are unreachable. |
+| 82 | Quaternion sandwich | ℍ | 1 | off | `i*a*j` | q ↦ iqj applied twice gives q back, so there are only fixed points and 2-cycles. |
+| 83 | Commutator | ℍ | 1 | off | `a*i - i*a` | The commutator with i depends only on the j and k parts: almost every state is unreachable, and all end in 15 short cycles. |
+| 84 | Quaternion cube | ℍ | mod 7 | off | `a^3 + 1` | Quaternions mod 7: 43 fixed points and eight 6-cycles. |
+| 85 | Mixed-moduli Fibonacci | ℤ² | mod 100, 99 | off | `b`, `a + b` | Fibonacci with a mod 100 and b mod 99 is no longer reversible: 99 unreachable states, 114 cycles, the longest 120. |
+| 86 | Mixed-moduli quadratic | ℤ² | mod 64, 81 | off | `b`, `a^2 + b` | Compare example 28: 16 cycles, the longest 30. |
 
 ### Digit append with longer blocks
 
