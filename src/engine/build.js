@@ -12,15 +12,15 @@ export function build(params, onProgress = () => {}) {
   const { dims, formulas } = params
   const BUDGET = Math.min(MAX_BUDGET, params.limit ?? DEFAULT_BUDGET)
   const c = compile(formulas.slice(0, dims), params)
-  const { R, lo } = c
-  const Nbig = BigInt(R) ** BigInt(dims)
+  const { R, lo, K } = c // per slot (integer component of a state)
+  const Nbig = R.reduce((n, r) => n * BigInt(r), 1n)
   const base = { totalStates: Nbig.toString(), tiers: c.tiers }
   return Nbig <= BigInt(ENUM_LIMIT)
-    ? enumerate(c, dims, Number(Nbig), base, onProgress)
-    : sample(c, dims, Nbig, base, onProgress)
+    ? enumerate(c, K, Number(Nbig), base, onProgress)
+    : sample(c, K, Nbig, base, onProgress)
 
   function decode(g, out, at) {
-    for (let i = dims - 1; i >= 0; i--) { out[at + i] = (g % R) + lo; g = Math.floor(g / R) }
+    for (let i = K - 1; i >= 0; i--) { out[at + i] = (g % R[i]) + lo[i]; g = Math.floor(g / R[i]) }
   }
 
   // ---------- exact: every state visited once, O(N) time, 12N bytes ----------
@@ -118,9 +118,9 @@ export function build(params, onProgress = () => {}) {
   function sample(c, dims, Nbig, base, onProgress) {
     const numericKey = Nbig < BigInt(Number.MAX_SAFE_INTEGER)
     const key = numericKey
-      ? (s) => { let k = 0; for (let i = 0; i < dims; i++) k = k * R + (s[i] - lo); return k }
+      ? (s) => { let k = 0; for (let i = 0; i < dims; i++) k = k * R[i] + (s[i] - lo[i]); return k }
       : (s) => s.join(',')
-    const rnd = (s) => { for (let i = 0; i < dims; i++) s[i] = lo + Math.floor(Math.random() * R) }
+    const rnd = (s) => { for (let i = 0; i < dims; i++) s[i] = lo[i] + Math.floor(Math.random() * R[i]) }
     const eq = (p, q) => { for (let i = 0; i < dims; i++) if (p[i] !== q[i]) return false; return true }
     const maxSteps = c.tiers.includes('bigint') ? 2e6 : 3e7
 

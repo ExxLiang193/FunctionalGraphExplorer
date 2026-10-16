@@ -11,7 +11,7 @@ self.onmessage = ({ data: params }) => {
     })
     const L = layout(g.m, g.succ)
     g.stats.ms = performance.now() - t0
-    const out = { type: 'done', graph: { m: g.m, dims: params.dims, coords: g.coords, succ: g.succ, flags: g.flags, ...L }, stats: g.stats }
+    const out = { type: 'done', graph: { m: g.m, dims: params.dims, comps: params.field === 'complex' ? 2 : params.field === 'quat' ? 4 : 1, coords: g.coords, succ: g.succ, flags: g.flags, ...L }, stats: g.stats }
     const transfer = Object.values(out.graph).filter((v) => ArrayBuffer.isView(v)).map((v) => v.buffer)
     self.postMessage(out, [...new Set(transfer)])
   } catch (e) {

@@ -10,7 +10,12 @@ const ATOM = 9, POW = 8, MUL = 6, ADD = 5, SHIFT = 4, CMP = 3, AND = 2, XOR = 1,
 export const countSymbols = (src) => (src.match(/log2|\d+|[a-z]+|<<|>>|<=|>=|!=|[-+*/^<>=]/gi) || [])
   .reduce((n, t) => n + (/^[a-e]+$/i.test(t) ? t.length : 1), 0)
 
-export function randomConfig(maxStates, rnd = Math.random) {
+// moduli the complex / quaternion dice may pick: small primes, prime powers and powers of ten
+const FIELD_MODULI = [2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 16, 17, 19, 23, 25, 27, 29, 31, 49, 64, 97, 100, 101, 128, 256, 997]
+
+/** Random configuration in the given number system ('int', 'complex' or 'quat'); the system itself never changes. */
+export function randomConfig(maxStates, rnd = Math.random, field = 'int') {
+  if (field !== 'int') return randomFieldConfig(maxStates, rnd, field)
   const int = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1))
   const pick = (xs) => xs[Math.floor(rnd() * xs.length)]
   const weighted = (table) => {
@@ -81,5 +86,51 @@ export function randomConfig(maxStates, rnd = Math.random) {
     do last = formula(null); while (!new RegExp(`(^|[^a-z])${vars[0]}([^a-z]|$)`).test(last))
     formulas = [...vars.slice(1), last]
   } else formulas = vars.map((v) => formula(v))
-  return { ...space, formulas }
+  return { ...space, field: 'int', formulas }
+}
+
+function randomFieldConfig(maxStates, rnd, field) {
+  const C = field === 'complex' ? 2 : 4
+  const int = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1))
+  const pick = (xs) => xs[Math.floor(rnd() * xs.length)]
+  // feasible spaces: one or two complex variables, or one quaternion
+  const options = []
+  for (let dims = 1; dims <= (C === 2 ? 2 : 1); dims++)
+    for (const P of FIELD_MODULI)
+      for (const negative of [false, true])
+        if ((negative ? 2 * P - 1 : P) ** (C * dims) <= maxStates) options.push({ dims, P, negative })
+  const dims = pick([...new Set(options.map((o) => o.dims))])
+  const fits = options.filter((o) => o.dims === dims && (!o.negative || rnd() < 0.3))
+  const { P, negative } = pick(fits.length ? fits : options.filter((o) => o.dims === dims))
+  const vars = VAR_NAMES.slice(0, dims)
+  const units = C === 2 ? ['i'] : ['i', 'j', 'k']
+
+  const ATOMIC = 9, MULP = 6, ADDP = 5
+  const wrap = (e, min) => (e.p >= min ? e.s : `(${e.s})`)
+  const variable = () => ({ s: pick(vars), p: ATOMIC, n: 1 })
+  const leaf = () => {
+    const r = rnd()
+    return r < 0.62 ? variable() : r < 0.82 ? { s: pick(units), p: ATOMIC, n: 1 } : { s: String(int(1, 9)), p: ATOMIC, n: 1 }
+  }
+  const infix = (op, p, l, r) => ({ s: `${wrap(l, p)} ${op} ${wrap(r, p + 1)}`, p, n: l.n + r.n + 1 })
+  function gen(budget) {
+    if (budget < 2) return leaf()
+    const r = rnd()
+    if (budget >= 3 && r < 0.3) { const l = gen(int(1, budget - 2)); return infix('*', MULP, l, gen(budget - 1 - l.n)) }
+    if (budget >= 3 && r < 0.5) { const l = gen(int(1, budget - 2)); return infix('+', ADDP, l, gen(budget - 1 - l.n)) }
+    if (budget >= 3 && r < 0.62) { const l = gen(int(1, budget - 2)); return infix('-', ADDP, l, gen(budget - 1 - l.n)) }
+    if (budget >= 3 && r < 0.84) { const b = gen(budget - 2); return { s: `${wrap(b, ATOMIC)}^${int(2, 3)}`, p: 8, n: b.n + 2 } }
+    if (r < 0.94) { const x = gen(budget - 1); return { s: `${pick(['conj', 're', 'im', 'norm'])}(${x.s})`, p: ATOMIC, n: x.n + 1 } }
+    return leaf()
+  }
+  const hasVar = (s) => vars.some((v) => new RegExp(`(^|[^a-z])${v}`).test(s.replace(/conj|norm|re|im/g, ' ')))
+  const formula = (self) => {
+    for (;;) {
+      const s = gen(int(3, MAX_SYMBOLS)).s
+      if (hasVar(s) && s !== self) return s
+    }
+  }
+  const formulas = dims > 1 && rnd() < 0.5 ? [vars[1], formula(null)] : vars.map((v) => formula(v))
+  const pow10 = P === 10 || P === 100
+  return { dims, digits: String(P - 1).length, modulus: pow10 ? null : P, negative, field, formulas }
 }

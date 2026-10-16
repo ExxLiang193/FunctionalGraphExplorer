@@ -78,11 +78,12 @@ function bounds(n, lo, hi, D) {
   let a, b
   switch (n.t) {
     case 'num': a = b = n.v; n.ok = true; break
-    case 'var': a = lo; b = hi; n.ok = true; break
+    case 'var': a = lo[n.i]; b = hi[n.i]; n.ok = true; break
     case 'neg': bounds(n.x, lo, hi, D); a = -n.x.hi; b = -n.x.lo; n.ok = n.x.ok; break
     case 'call': {
       n.args.forEach((x) => bounds(x, lo, hi, D))
       n.ok = n.args.every((x) => x.ok)
+      if (!FN[n.f]) throw new Error(`${n.f}() needs complex or quaternion mode`)
       ;[a, b] = FN[n.f].ctx ? FN[n.f].bounds(...n.args, D) : FN[n.f].bounds(...n.args)
       break
     }
@@ -131,7 +132,7 @@ class NeedBig extends Error {}
 
 // Emits an expression congruent to n (mod P) with value in [0, P). P <= 1e6 so products stay exact.
 function genMod(n, P, D) {
-  if (n.ok) return `fm(${genFloat(n, D)})`
+  if (n.ok) return `fm(${genFloat(n, D)},${P})`
   const g = (x) => genMod(x, P, D)
   switch (n.t) {
     case 'num': return `${Number(BigInt(n.raw) % BigInt(P))}`
@@ -140,7 +141,7 @@ function genMod(n, P, D) {
     case 'sub': return `((${g(n.l)}-${g(n.r)}+${P})%${P})`
     case 'mul': return `((${g(n.l)}*${g(n.r)})%${P})`
     case 'pow':
-      if (n.r.ok && n.r.lo >= 0) return `powm(${g(n.l)},${genFloat(n.r, D)})`
+      if (n.r.ok && n.r.lo >= 0) return `powm(${g(n.l)},${genFloat(n.r, D)},${P})`
       throw new NeedBig()
     case 'call':
       if (n.f === 'if' && n.args[0].ok) return `(${genFloat(n.args[0], D)}!==0?${g(n.args[1])}:${g(n.args[2])})`
@@ -331,56 +332,172 @@ const HELPERS = {
   band, bor, bxor, shl, bshl,
 }
 
+// ---------- complex numbers and quaternions ----------
+// A value is C integer components (C = 2: x + yi, C = 4: w + xi + yj + zk). Only ring operations are
+// allowed, so with an unsigned range every component can be reduced mod P as we go.
+const MUL = {
+  // each output component is a signed sum of products a[p] * b[q]
+  2: [[[1, 0, 0], [-1, 1, 1]], [[1, 0, 1], [1, 1, 0]]],
+  4: [
+    [[1, 0, 0], [-1, 1, 1], [-1, 2, 2], [-1, 3, 3]],
+    [[1, 0, 1], [1, 1, 0], [1, 2, 3], [-1, 3, 2]],
+    [[1, 0, 2], [-1, 1, 3], [1, 2, 0], [1, 3, 1]],
+    [[1, 0, 3], [1, 1, 2], [-1, 2, 1], [1, 3, 0]],
+  ],
+}
+const FIELD_FNS = ['conj', 're', 'im', 'norm']
+
+// Largest |component| any intermediate can reach; throws on operations that have no meaning here.
+function fieldBound(n, C, mag, name) {
+  const b = (x) => fieldBound(x, C, mag, name)
+  let r
+  switch (n.t) {
+    case 'num': r = n.v; break
+    case 'unit': r = 1; break
+    case 'var': r = mag[n.i]; break
+    case 'neg': r = b(n.x); break
+    case 'add': case 'sub': r = b(n.l) + b(n.r); break
+    case 'mul': r = C * b(n.l) * b(n.r); break
+    case 'pow': {
+      if (n.r.t !== 'num') throw new Error(`Exponents must be whole numbers like a^2 for ${name}`)
+      let base = b(n.l), acc = 1, worst = base
+      for (let e = n.r.v; e > 0; e = Math.floor(e / 2)) {
+        if (e % 2) { acc = C * acc * base; worst = Math.max(worst, acc) }
+        if (e > 1) { base = C * base * base; worst = Math.max(worst, base) }
+      }
+      r = worst
+      break
+    }
+    case 'call':
+      if (!FIELD_FNS.includes(n.f)) throw new Error(`${n.f}() is not available for ${name}`)
+      r = n.f === 'norm' ? C * b(n.args[0]) ** 2 : b(n.args[0])
+      break
+    default: throw new Error(`"${n.t === 'mod' ? 'mod' : n.t}" is not available for ${name}`)
+  }
+  n.B = r
+  return Math.max(r, ...(n.args || [n.l, n.r, n.x].filter(Boolean)).map((x) => x.W ?? 0), (n.W = r))
+}
+
+/** Emits statements computing formula `ast` as C components; returns { stmts, outs }. */
+function genField(ast, C, tier, P, Pv, used, tag) {
+  const stmts = []
+  let t = 0
+  const Z = tier === 'bigint' ? '0n' : '0'
+  const red = (x) => (tier === 'modular' ? `fm(${x},${P})` : x)
+  const emit = (x) => { const v = `t${tag}_${t++}`; stmts.push(`const ${v}=${red(x)};`); return v }
+  const lit = (n) => (tier === 'bigint' ? `${n.raw}n` : tier === 'modular' ? `${Number(BigInt(n.raw) % BigInt(P))}` : `${n.v}`)
+  const comp = (j, c) => {
+    const k = j * C + c
+    if (tier === 'bigint') { used.add(k); return `B${k}` }
+    return tier === 'modular' && Pv[j] > P ? `(v${k}%${P})` : `v${k}`
+  }
+  const one = (u) => Array.from({ length: C }, (_, c) => (c === u ? (tier === 'bigint' ? '1n' : '1') : Z))
+  const mul = (a, b) => MUL[C].map((terms) => emit(terms.map(([sg, p, q], i) => `${sg < 0 ? '-' : i ? '+' : ''}${a[p]}*${b[q]}`).join('')))
+  const g = (n) => {
+    switch (n.t) {
+      case 'num': return [lit(n), ...Array(C - 1).fill(Z)]
+      case 'unit': return one(n.u)
+      case 'var': return Array.from({ length: C }, (_, c) => comp(n.i, c))
+      case 'neg': return g(n.x).map((x) => emit(`-(${x})`))
+      case 'add': { const a = g(n.l), b = g(n.r); return a.map((x, c) => emit(`${x}+${b[c]}`)) }
+      case 'sub': { const a = g(n.l), b = g(n.r); return a.map((x, c) => emit(`${x}-(${b[c]})`)) }
+      case 'mul': return mul(g(n.l), g(n.r))
+      case 'pow': {
+        let base = g(n.l), acc = null
+        for (let e = n.r.v; e > 0; e = Math.floor(e / 2)) {
+          if (e % 2) acc = acc ? mul(acc, base) : base
+          if (e > 1) base = mul(base, base)
+        }
+        return acc ?? one(0)
+      }
+      case 'call': {
+        const x = g(n.args[0])
+        if (n.f === 'conj') return x.map((v, c) => (c ? emit(`-(${v})`) : v))
+        if (n.f === 're') return [x[0], ...Array(C - 1).fill(Z)]
+        if (n.f === 'im') return C === 2 ? [x[1], Z] : [Z, ...x.slice(1)]
+        return [emit(x.map((v) => `${v}*${v}`).join('+')), ...Array(C - 1).fill(Z)] // norm
+      }
+    }
+  }
+  return { stmts, outs: g(ast) }
+}
+
 /**
- * `modulus` (optional) replaces 10^digits as the wrap-around modulus.
+ * `modulus` (optional) replaces 10^digits as the wrap-around modulus; `moduli[j]` overrides it for variable j.
+ * `field` is 'int', 'complex' or 'quat'. Slots are the integer components of a state (dims * C of them).
  * @returns {{ tiers: string[], fill(next, from, to), step(src, dst) }}
  *   fill writes next[i] for state indices [from, to); step maps one coordinate tuple.
  *   State index = sum_i (v_i - lo) * R^(n-1-i).
  */
-export function compile(formulas, { dims, digits, negative, modulus }) {
-  // Values live in [0, P) (or (-P, P) with negatives); P is 10^digits unless a custom modulus is given.
-  const P = modulus ?? 10 ** digits
-  if (!Number.isInteger(P) || P < 2 || P > 9e7) throw new Error('Modulus must be a whole number from 2 to 90,000,000')
-  digits = String(P - 1).length // width used by desc() padding
-  const lo = negative ? -(P - 1) : 0
-  const hi = P - 1
-  const R = hi - lo + 1
+export function compile(formulas, { dims, digits, negative, modulus, moduli, field = 'int' }) {
+  // Each variable lives in [0, P) (or (-P, P) with negatives). P is 10^digits, or the custom modulus,
+  // or that variable's own entry in `moduli`. Complex/quaternion variables use it for every component.
+  const C = field === 'complex' ? 2 : field === 'quat' ? 4 : 1
+  const name = C === 2 ? 'complex numbers' : 'quaternions'
+  const units = C === 2 ? 'i' : C === 4 ? 'ijk' : ''
+  const base = modulus ?? 10 ** digits
+  const Pv = Array.from({ length: dims }, (_, j) => moduli?.[j] ?? base)
+  for (const P of Pv) if (!Number.isInteger(P) || P < 2 || P > 9e7) throw new Error('Modulus must be a whole number from 2 to 90,000,000')
+  // slots: one per integer component of the state, variable-major
+  const K = dims * C
+  const P = Array.from({ length: K }, (_, k) => Pv[Math.floor(k / C)])
+  const lo = P.map((p) => (negative ? -(p - 1) : 0))
+  const hi = P.map((p) => p - 1)
+  const R = P.map((p, k) => hi[k] - lo[k] + 1)
   const tiers = []
   const used = new Set()
-  const exprs = formulas.map((src, i) => {
+  const results = []
+  formulas.forEach((src, j) => {
+    const Pj = Pv[j], D = String(Pj - 1).length // D: width used by desc() padding
     let ast
-    try { ast = parse(src, dims) } catch (e) { e.formulaIndex = i; throw e }
-    bounds(ast, lo, hi, digits)
-    if (ast.ok) { tiers.push('float'); return negative ? `tm(${genFloat(ast, digits)})` : `fm(${genFloat(ast, digits)})` }
-    if (!negative) {
-      try { const s = genMod(ast, P, digits); tiers.push('modular'); return s } catch (e) { if (!(e instanceof NeedBig)) throw e }
+    try {
+      ast = parse(src, dims, units)
+      if (C > 1) {
+        const worst = fieldBound(ast, C, Pv.map((p) => p - 1), name)
+        const tier = !negative ? 'modular' : worst <= SAFE ? 'float' : 'bigint'
+        tiers.push(tier)
+        const { stmts, outs } = genField(ast, C, tier, Pj, Pv, used, j)
+        results.push(stmts.join(''))
+        outs.forEach((x, c) => results.push(`const r${j * C + c}=${tier === 'modular' ? x : tier === 'float' ? `tm(${x},${Pj})` : `Number((${x})%${Pj}n)`};`))
+        return
+      }
+      bounds(ast, lo, hi, D)
+    } catch (e) { e.formulaIndex = j; throw e }
+    let expr
+    if (ast.ok) { tiers.push('float'); expr = negative ? `tm(${genFloat(ast, D)},${Pj})` : `fm(${genFloat(ast, D)},${Pj})` }
+    if (!expr && !negative) {
+      try { expr = genMod(ast, Pj, D); tiers.push('modular') } catch (e) { if (!(e instanceof NeedBig)) throw e }
     }
-    tiers.push('bigint')
-    const b = genBig(ast, used, digits)
-    return negative ? `Number((${b})%${P}n)` : `Number(bmod(${b},${P}n))`
+    if (!expr) {
+      tiers.push('bigint')
+      const b = genBig(ast, used, D)
+      expr = negative ? `Number((${b})%${Pj}n)` : `Number(bmod(${b},${Pj}n))`
+    }
+    results.push(`const r${j}=${expr};`)
   })
 
-  const idx = Array.from({ length: dims }, (_, i) => i)
-  const bigDecl = [...used].map((i) => `const B${i}=BigInt(v${i});`).join('')
-  const results = exprs.map((e, i) => `const r${i}=${e};`).join('')
+  const idx = Array.from({ length: K }, (_, k) => k)
+  const bigDecl = [...used].map((k) => `const B${k}=BigInt(v${k});`).join('')
+  const body = results.join('')
   const pre = `
-    function fm(x){x%=${P};return x<0?x+${P}:x}
-    function tm(x){return x%${P}}
-    function powm(b,e){let r=1;while(e>0){if(e%2===1)r=r*b%${P};e=Math.floor(e/2);b=b*b%${P}}return r}`
+    function fm(x,P){x%=P;return x<0?x+P:x}
+    function tm(x,P){return x%P}
+    function powm(b,e,P){let r=1;while(e>0){if(e%2===1)r=r*b%P;e=Math.floor(e/2);b=b*b%P}return r}`
 
-  // Horner-encoded successor index; coordinates advance by odometer (no div/mod in the hot loop).
-  const horner = idx.reduce((acc, i) => (i === 0 ? `(r0-(${lo}))` : `(${acc}*${R}+(r${i}-(${lo})))`), '')
-  // odometer: the last variable spins fastest, matching the index encoding
+  // Mixed-radix successor index (Horner); coordinates advance by odometer (no div/mod in the hot loop).
+  const horner = idx.reduce((acc, k) => (k === 0 ? `(r0-(${lo[0]}))` : `(${acc}*${R[k]}+(r${k}-(${lo[k]})))`), '')
+  // odometer: the last slot spins fastest, matching the index encoding
   let odo = ''
-  for (let i = 0; i < dims; i++) odo = i === 0 ? `++v0;` : `if(++v${i}>${hi}){v${i}=${lo};${odo}}`
-  const decode = idx.map((i) => `let v${i}=${lo}+Math.floor(from/${R ** (dims - 1 - i)})%${R};`).join('')
+  for (let k = 0; k < K; k++) odo = k === 0 ? `++v0;` : `if(++v${k}>${hi[k]}){v${k}=${lo[k]};${odo}}`
+  const stride = idx.map((k) => R.slice(k + 1).reduce((a, b) => a * b, 1))
+  const decode = idx.map((k) => `let v${k}=${lo[k]}+Math.floor(from/${stride[k]})%${R[k]};`).join('')
   const fillSrc = `${pre}
     return function fill(next,from,to){${decode}
-      for(let i=from;i<to;i++){${bigDecl}${results}next[i]=${horner};${odo}}
+      for(let i=from;i<to;i++){${bigDecl}${body}next[i]=${horner};${odo}}
     }`
   const stepSrc = `${pre}
-    return function step(s,o){${idx.map((i) => `const v${i}=s[${i}];`).join('')}${bigDecl}${results}${idx.map((i) => `o[${i}]=r${i}+0;`).join('')}}`
+    return function step(s,o){${idx.map((k) => `const v${k}=s[${k}];`).join('')}${bigDecl}${body}${idx.map((k) => `o[${k}]=r${k}+0;`).join('')}}`
 
   const mk = (src) => new Function(...Object.keys(HELPERS), src)(...Object.values(HELPERS))
-  return { tiers, fill: mk(fillSrc), step: mk(stepSrc), P, lo, hi, R }
+  return { tiers, fill: mk(fillSrc), step: mk(stepSrc), K, C, P, lo, hi, R }
 }

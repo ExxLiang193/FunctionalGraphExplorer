@@ -9,7 +9,7 @@
 //   unary  := '-' unary | power
 //   power  := atom ('^' unary)?                    right-associative, tighter than unary minus
 //   atom   := number | variable | '(' or ')' | name '(' or (',' or)* ')'
-// AST nodes: {t:'num',v,raw} {t:'var',i} {t:'neg',x} {t:'add'|'sub'|'mul'|'mod'|'pow',l,r}
+// AST nodes: {t:'num',v,raw} {t:'var',i} {t:'unit',u} (i, j, k = 1, 2, 3) {t:'neg',x} {t:'add'|'sub'|'mul'|'mod'|'pow',l,r}
 //            {t:'call',f,args}  for everything else (see FN in compile.js)
 
 export const VAR_NAMES = ['a', 'b', 'c', 'd', 'e']
@@ -20,6 +20,7 @@ export const FUNCTIONS = {
   digitsum: [1, 1], reverse: [1, 1], digits: [1, 1], concat: [2, 9], asc: [1, 1], desc: [1, 1],
   digitprod: [1, 1], digit: [2, 2], lcm: [2, 9], sign: [1, 1], isqrt: [1, 1], log2: [1, 1],
   sigma: [1, 1], phi: [1, 1], spf: [1, 1], isprime: [1, 1],
+  conj: [1, 1], re: [1, 1], im: [1, 1], norm: [1, 1], // complex / quaternion only
 }
 const WORD_OPS = ['mod', 'div', 'xor', 'and', 'or']
 const WORDS = [...Object.keys(FUNCTIONS), ...WORD_OPS].sort((p, q) => q.length - p.length)
@@ -27,7 +28,8 @@ const SYMBOLS = ['+', '-', '*', '/', '^', '(', ')', ',', '<', '<=', '>', '>=', '
 const ALIAS = { '%': 'mod', '−': '-', '×': '*', '·': '*', '÷': '/', '==': '=', '≠': '!=', '≤': '<=', '≥': '>=' }
 const CMP = { '<': 'lt', '<=': 'le', '>': 'gt', '>=': 'ge', '=': 'eq', '!=': 'ne' }
 
-export function parse(src, dims) {
+/** `units` lists the imaginary units allowed as constants: '' (integers), 'i' (complex) or 'ijk' (quaternions). */
+export function parse(src, dims, units = '') {
   const toks = []
   const re = /\s*(?:(\d+)|((?:log2|[A-Za-z])+)|(<<|>>|<=|>=|==|!=|.))/giy
   let m
@@ -39,6 +41,7 @@ export function parse(src, dims) {
       while (w.length) {
         const kw = WORDS.find((k) => w.startsWith(k))
         if (kw) { toks.push(WORD_OPS.includes(kw) ? { k: 'op', s: kw } : { k: 'fn', s: kw }); w = w.slice(kw.length); continue }
+        if (units.includes(w[0])) { toks.push({ k: 'unit', u: 'ijk'.indexOf(w[0]) + 1 }); w = w.slice(1); continue }
         const i = VAR_NAMES.indexOf(w[0])
         if (i < 0 || i >= dims) throw new Error(`Unknown symbol "${w[0]}" (variables: ${VAR_NAMES.slice(0, dims).join(', ')})`)
         toks.push({ k: 'var', i })
@@ -101,6 +104,7 @@ export function parse(src, dims) {
     if (!tk) throw new Error('Unexpected end of formula')
     if (tk.k === 'num') { p++; return { t: 'num', v: Number(tk.s), raw: tk.s.replace(/^0+(?=\d)/, '') } }
     if (tk.k === 'var') { p++; return { t: 'var', i: tk.i } }
+    if (tk.k === 'unit') { p++; return { t: 'unit', u: tk.u } }
     if (tk.k === 'fn') {
       p++
       if (!eat('(')) throw new Error(`Expected "(" after ${tk.s}`)
@@ -122,6 +126,6 @@ export function parse(src, dims) {
   }
 
   const ast = expr()
-  if (p < toks.length) throw new Error(`Unexpected "${toks[p].s ?? VAR_NAMES[toks[p].i]}"`)
+  if (p < toks.length) throw new Error(`Unexpected "${toks[p].s ?? (toks[p].u ? 'ijk'[toks[p].u - 1] : VAR_NAMES[toks[p].i])}"`)
   return ast
 }

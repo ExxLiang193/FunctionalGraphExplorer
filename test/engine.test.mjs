@@ -76,20 +76,21 @@ const cases = [
 let tiersSeen = new Set()
 for (const negative of [false, true]) for (const [digits, modulus] of [[1], [2], [2, 37]]) for (const f of cases) {
   const c = compile(f, { dims: 2, digits, negative, modulus })
-  assert.equal(c.P, modulus ?? 10 ** digits)
+  assert.deepEqual(c.P, [modulus ?? 10 ** digits, modulus ?? 10 ** digits])
   c.tiers.forEach((t) => tiersSeen.add(t))
   const asts = f.map((s) => parse(s, 2))
-  const N = c.R ** 2
+  const [R, lo, P] = [c.R[0], c.lo[0], c.P[0]]
+  const N = R ** 2
   const next = new Uint32Array(N)
   // fill in two uneven chunks to exercise the decode path
   c.fill(next, 0, 37); c.fill(next, 37, N)
   const s = new Float64Array(2), o = new Float64Array(2)
   // small spaces are checked exhaustively, larger ones on a stride (the reference evaluator is slow)
   for (let i = 0; i < N; i += N > 500 ? 29 : 1) {
-    const v = [Math.floor(i / c.R) + c.lo, (i % c.R) + c.lo]
-    v.D = String(c.P - 1).length
-    const want = asts.map((a) => wrap(ev(a, v), c.P, negative))
-    const wi = (want[0] - c.lo) * c.R + (want[1] - c.lo)
+    const v = [Math.floor(i / R) + lo, (i % R) + lo]
+    v.D = String(P - 1).length
+    const want = asts.map((a) => wrap(ev(a, v), P, negative))
+    const wi = (want[0] - lo) * R + (want[1] - lo)
     assert.equal(next[i], wi, `${f} neg=${negative} d=${digits} at ${v}: tiers ${c.tiers}`)
     s[0] = v[0]; s[1] = v[1]; c.step(s, o)
     assert.deepEqual([o[0], o[1]], want)
@@ -221,7 +222,101 @@ for (const p of [
   }
   for (const w of ['if', 'abs', 'min', 'gcd', 'digitsum', 'reverse', 'asc', 'desc', 'xor', 'and', 'or', 'mod']) assert.ok(seen.has(w), `never generated ${w}`)
   console.log(`randomizer: 300 configs ok, slowest build ${slowest.toFixed(0)}ms`)
+  // complex and quaternion dice: stay in their system, fit the limit, only use ring operations
+  for (const field of ['complex', 'quat']) {
+    const dimsSeen = new Set()
+    for (let i = 0; i < 120; i++) {
+      const r = randomConfig(1e6, rnd, field)
+      assert.equal(r.field, field)
+      const P = r.modulus ?? 10 ** r.digits, C = field === 'complex' ? 2 : 4
+      assert.ok((r.negative ? 2 * P - 1 : P) ** (C * r.dims) <= 1e6, 'state limit')
+      for (const f of r.formulas) assert.ok(countSymbols(f) <= MAX_SYMBOLS, `symbols: ${f}`)
+      compile(r.formulas, r)
+      if ((r.negative ? 2 * P - 1 : P) ** (C * r.dims) <= 20000) assert.ok(build(r).m > 0)
+      dimsSeen.add(r.dims)
+    }
+    assert.equal(dimsSeen.size, field === 'complex' ? 2 : 1)
+    const r = randomConfig(1e6, rnd, field)
+    console.log(`  ${field} dims=${r.dims} mod=${r.modulus ?? 10 ** r.digits} neg=${r.negative}: (${r.formulas.join(', ')})`)
+  }
   for (let i = 0; i < 6; i++) { const r = randomConfig(1e6, rnd); console.log(`  Z^${r.dims} d=${r.digits} neg=${r.negative}: (${r.formulas.join(', ')})`) }
+}
+
+// --- per-variable moduli: each output wraps at its own variable's modulus ---
+{
+  const c = compile(['b + 7', 'a*a + b'], { dims: 2, digits: 2, negative: false, moduli: [100, 37] })
+  assert.deepEqual([c.R, c.K], [[100, 37], 2])
+  const next = new Uint32Array(100 * 37)
+  c.fill(next, 0, next.length)
+  for (let i = 0; i < next.length; i += 7) {
+    const a = Math.floor(i / 37), b = i % 37
+    assert.equal(next[i], ((b + 7) % 100) * 37 + ((a * a + b) % 37))
+  }
+  assert.equal(build({ dims: 2, digits: 2, negative: true, moduli: [10, 3], formulas: ['b', 'a'] }).stats.totalStates, String(19 * 5))
+}
+
+// --- complex numbers and quaternions against a reference with BigInt components ---
+{
+  const MULREF = {
+    2: (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]],
+    4: (a, b) => [ // Hamilton product
+      a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+      a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+      a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+      a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0],
+    ],
+  }
+  const fev = (n, vars, C) => {
+    const z = () => Array(C).fill(0n)
+    switch (n.t) {
+      case 'num': { const r = z(); r[0] = BigInt(n.raw); return r }
+      case 'unit': { const r = z(); r[n.u] = 1n; return r }
+      case 'var': return vars[n.i]
+      case 'neg': return fev(n.x, vars, C).map((x) => -x)
+      case 'add': { const a = fev(n.l, vars, C), b = fev(n.r, vars, C); return a.map((x, i) => x + b[i]) }
+      case 'sub': { const a = fev(n.l, vars, C), b = fev(n.r, vars, C); return a.map((x, i) => x - b[i]) }
+      case 'mul': return MULREF[C](fev(n.l, vars, C), fev(n.r, vars, C))
+      case 'pow': { let r = z(); r[0] = 1n; const b = fev(n.l, vars, C); for (let e = 0; e < n.r.v; e++) r = MULREF[C](r, b); return r }
+      case 'call': {
+        const x = fev(n.args[0], vars, C)
+        if (n.f === 'conj') return x.map((v, i) => (i ? -v : v))
+        if (n.f === 're') return [x[0], ...Array(C - 1).fill(0n)]
+        if (n.f === 'im') return C === 2 ? [x[1], 0n] : [0n, ...x.slice(1)]
+        return [x.reduce((t, v) => t + v * v, 0n), ...Array(C - 1).fill(0n)]
+      }
+    }
+  }
+  const cases = [
+    ['complex', 2, [['a^2 + i', 'b*a - 3'], ['conj(a)*b + norm(b)', 'i*a^3 - re(b) + im(a)*i'], ['(a + 2i)^5', 'a*b*a - b^2']]],
+    ['quat', 1, [['a^2 + j'], ['i*a*j'], ['a*i - i*a'], ['conj(a)*a'], ['(a + k)^3 - im(a)*j'], ['a^7'], ['a^40 + i']]],
+  ]
+  const tiersSeenF = new Set()
+  for (const [field, dims, sets] of cases) for (const negative of [false, true]) for (const [digits, modulus] of [[1], [1, 7]]) for (const f of sets) {
+    const C = field === 'complex' ? 2 : 4
+    const c = compile(f, { dims, digits, negative, modulus, field })
+    const asts = f.map((x) => parse(x, dims, C === 2 ? 'i' : 'ijk'))
+    const N = c.R.reduce((a, b) => a * b, 1), K = dims * C
+    const next = new Uint32Array(N)
+    c.fill(next, 0, N)
+    const P = BigInt(c.P[0])
+    const wrapC = (x) => Number(negative ? x % P : ((x % P) + P) % P)
+    for (let i = 0; i < N; i += N > 3000 ? 13 : 1) {
+      const slots = []
+      for (let k = K - 1, g = i; k >= 0; k--) { slots[k] = (g % c.R[k]) + c.lo[k]; g = Math.floor(g / c.R[k]) }
+      const vars = Array.from({ length: dims }, (_, j) => slots.slice(j * C, j * C + C).map(BigInt))
+      const out = asts.flatMap((a) => fev(a, vars, C).map(wrapC))
+      const want = out.reduce((acc, v, k) => acc * c.R[k] + (v - c.lo[k]), 0)
+      assert.equal(next[i], want, `${field} ${f} neg=${negative} mod=${c.P[0]} at ${slots}: tiers ${c.tiers}`)
+    }
+    tiersSeenF.add(c.tiers[0])
+  }
+  assert.deepEqual([...tiersSeenF].sort(), ['bigint', 'float', 'modular'])
+  // the map q -> i q j is an involution: only fixed points and 2-cycles
+  const inv = build({ dims: 1, digits: 1, negative: false, field: 'quat', formulas: ['i*a*j'] }).stats.census
+  assert.ok(inv.every(([len]) => len <= 2))
+  for (const bad of ['a mod 2', 'a / 2', 'a^b', 'digitsum(a)', 'a < 1', 'a xor 1']) assert.throws(() => compile([bad, 'b'], { dims: 2, digits: 1, negative: false, field: 'complex' }), bad)
+  assert.throws(() => compile(['a + j'], { dims: 1, digits: 1, negative: false, field: 'complex' }), 'j is not complex')
+  assert.throws(() => compile(['conj(a)'], { dims: 1, digits: 1, negative: false }), 'conj needs complex mode')
 }
 
 // --- sample limit ---
